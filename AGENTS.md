@@ -24,3 +24,8 @@ This repository contains a single-user public Goal Map. Keep the product a calm 
 ## Definition of done
 
 Run test, coverage, lint, typecheck, build, and browser smoke checks. Review the code and security rules before committing. Verify the deployed GitHub Pages URL on desktop and mobile.
+
+## Remote workflow
+
+- The owner preauthorizes ordinary pushes to this repository, including its existing CI and GitHub Pages workflow. No separate push approval is needed for Soul.
+- Force pushes and remote history rewrites still require explicit approval.
