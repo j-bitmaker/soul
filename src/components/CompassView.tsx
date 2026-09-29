@@ -127,6 +127,20 @@ function Frontier({ props }: { props: CompassViewProps }) {
   </section>
 }
 
+function FrontierPeek({ props }: { props: CompassViewProps }) {
+  const entries = props.map.frontier
+    .map((entry) => ({ entry, node: props.map.nodes[entry.nodeId] }))
+    .filter(({ node }) => node && !node.archived)
+  if (!entries.length) return null
+  return <aside className="frontier-peek" aria-label="Current focus">
+    <span className="frontier-peek-label">In focus now</span>
+    <div className="frontier-peek-items">{entries.map(({ entry, node }) =>
+      <div className="frontier-peek-item" key={entry.nodeId}>
+        <span>{node.title}</span><span className="frontier-peek-status" data-status={entry.status}>{entry.status}</span>
+      </div>)}</div>
+  </aside>
+}
+
 function Overview({ props }: { props: CompassViewProps }) {
   return <main className="page" id="main-content">
     <section className="orientation" aria-labelledby="soul-title">
@@ -135,6 +149,7 @@ function Overview({ props }: { props: CompassViewProps }) {
       <p className="soul-subtitle">The orientation above every goal.</p>
       <div className="axis" aria-hidden="true" />
     </section>
+    <FrontierPeek props={props} />
     <section aria-labelledby="directions-title">
       <div className="section-heading"><h2 id="directions-title">Three directions</h2><p>Distinct, alive, and connected</p></div>
       <div className="cluster-grid">{CLUSTER_IDS.map((id, index) => {
