@@ -1,4 +1,4 @@
-import { CLUSTER_IDS, ROOT_ID, type FrontierStatus, type GoalMap, type GoalNode } from './types'
+import { CLUSTER_IDS, ROOT_ID, type FrontierStatus, type GoalMap, type GoalNode, type Routine } from './types'
 
 function requireNode(map: GoalMap, id: string): GoalNode {
   const node = map.nodes[id]
@@ -152,6 +152,22 @@ function mergedNote(source: GoalNode, target: GoalNode): string {
   return [target.note, `Merged from ${source.title}${sourceDetails ? `:\n${sourceDetails}` : ''}`].filter(Boolean).join('\n\n')
 }
 
+function mergedRoutines(source: GoalNode, target: GoalNode): Routine[] {
+  const routines = [...(target.routines ?? [])]
+  const ids = new Set(routines.map((item) => item.id))
+  for (const item of source.routines ?? []) {
+    let id = item.id
+    if (ids.has(id)) {
+      const prefix = `${source.id}-${id}`
+      id = prefix
+      for (let suffix = 2; ids.has(id); suffix += 1) id = `${prefix}-${suffix}`
+    }
+    routines.push({ ...item, id })
+    ids.add(id)
+  }
+  return routines
+}
+
 function mergedTarget(source: GoalNode, target: GoalNode): GoalNode {
   const milestones = [...(target.milestones ?? []), ...(source.milestones ?? []).map((item) => ({
     ...item, id: `${source.id}-${item.id}`,
@@ -162,7 +178,8 @@ function mergedTarget(source: GoalNode, target: GoalNode): GoalNode {
     secondaryIds: [...new Set([...target.secondaryIds, ...source.secondaryIds])].filter(
       (id) => id !== source.id && id !== target.id),
     current: target.current ?? source.current, target: target.target ?? source.target,
-    milestones, reminders: [...new Set([...(target.reminders ?? []), ...(source.reminders ?? [])])],
+    milestones, routines: mergedRoutines(source, target),
+    reminders: [...new Set([...(target.reminders ?? []), ...(source.reminders ?? [])])],
     note: mergedNote(source, target),
   }
 }

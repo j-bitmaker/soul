@@ -26,7 +26,7 @@ function optionalText(value: unknown, name: string): void {
 function validateNode(id: string, value: unknown, ids: Set<string>): void {
   const node = object(value)
   knownFields(node, ['id', 'title', 'parentId', 'childrenIds', 'visibleChildIds', 'secondaryIds',
-    'description', 'current', 'target', 'milestones', 'reminders', 'note', 'archived'])
+    'description', 'current', 'target', 'milestones', 'routines', 'reminders', 'note', 'archived'])
   if (node.id !== id || typeof node.title !== 'string' || !node.title.trim()) {
     throw new Error(`Invalid node ${id}`)
   }
@@ -45,6 +45,22 @@ function validateNode(id: string, value: unknown, ids: Set<string>): void {
   if (node.archived !== undefined && typeof node.archived !== 'boolean') throw new Error(`Invalid archived flag for ${id}`)
   if (node.reminders !== undefined) strings(node.reminders, 'reminders')
   if (node.milestones !== undefined) validateMilestones(node.milestones)
+  if (node.routines !== undefined) validateRoutines(node.routines)
+}
+
+function validateRoutines(value: unknown): void {
+  if (!Array.isArray(value)) throw new Error('Invalid routines')
+  const ids = new Set<string>()
+  for (const item of value) {
+    const routine = object(item)
+    knownFields(routine, ['id', 'title', 'cadence'])
+    if (typeof routine.id !== 'string' || !routine.id.trim() ||
+      typeof routine.title !== 'string' || !routine.title.trim() || ids.has(routine.id)) {
+      throw new Error('Invalid routine')
+    }
+    optionalText(routine.cadence, 'routine cadence')
+    ids.add(routine.id)
+  }
 }
 
 function validateMilestones(value: unknown): void {

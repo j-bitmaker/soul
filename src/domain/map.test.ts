@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createSeedMap } from './seed'
+import { exportMap } from './validation'
 import {
   addGoal,
   archiveGoal,
@@ -23,6 +24,9 @@ describe('goal map', () => {
       { nodeId: 'professional-autonomy', status: 'primary' },
       { nodeId: 'launch-blog', status: 'active' },
       { nodeId: 'english-c1', status: 'maintain' },
+    ])
+    expect(map.nodes.understand.routines).toEqual([
+      { id: 'read-bible', title: 'Read Bible', cadence: 'Daily' },
     ])
   })
 
@@ -104,5 +108,36 @@ describe('goal map', () => {
     expect(map.nodes['english-c1'].secondaryIds).toContain('clear-speech-writing')
     expect(map.nodes['clear-speech-writing'].note).toContain('Launch Blog')
     expect(map.frontier.some((entry) => entry.nodeId === 'launch-blog')).toBe(false)
+  })
+
+  it('preserves routines through moves and archives', () => {
+    const seed = createSeedMap()
+    const withRoutine = { ...seed, nodes: { ...seed.nodes,
+      'launch-blog': { ...seed.nodes['launch-blog'], routines: [{ id: 'publish', title: 'Write', cadence: 'Weekly' }] },
+    } }
+    const moved = moveGoal(withRoutine, 'launch-blog', 'create')
+    const archived = archiveGoal(moved, 'launch-blog')
+    expect(archived.nodes['launch-blog'].routines).toEqual([{ id: 'publish', title: 'Write', cadence: 'Weekly' }])
+  })
+
+  it('merges routines from both goals and gives conflicting source IDs unique names', () => {
+    const seed = createSeedMap()
+    const source = { ...seed.nodes['launch-blog'], routines: [
+      { id: 'daily', title: 'Write', cadence: 'Daily' },
+      { id: 'weekly', title: 'Review', cadence: 'Weekly' },
+    ] }
+    const target = { ...seed.nodes['clear-speech-writing'], routines: [
+      { id: 'daily', title: 'Speak', cadence: 'Daily' },
+      { id: 'launch-blog-daily', title: 'Listen' },
+    ] }
+    const map = { ...seed, nodes: { ...seed.nodes, 'launch-blog': source, 'clear-speech-writing': target } }
+    const merged = mergeGoals(map, 'launch-blog', 'clear-speech-writing')
+    expect(merged.nodes['clear-speech-writing'].routines).toEqual([
+      { id: 'daily', title: 'Speak', cadence: 'Daily' },
+      { id: 'launch-blog-daily', title: 'Listen' },
+      { id: 'launch-blog-daily-2', title: 'Write', cadence: 'Daily' },
+      { id: 'weekly', title: 'Review', cadence: 'Weekly' },
+    ])
+    expect(() => exportMap(merged)).not.toThrow()
   })
 })

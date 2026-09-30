@@ -60,6 +60,19 @@ describe('GoalEditor', () => {
     }))
   })
 
+  it('adds a Routine with an optional cadence to a goal', () => {
+    const onSave = vi.fn()
+    render(<GoalEditor map={createSeedMap()} parentId="understand" open onClose={vi.fn()} onSave={onSave} />)
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Read deeply' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add routine' }))
+    fireEvent.change(screen.getByLabelText('Routine title 1'), { target: { value: '  Read for 20 minutes  ' } })
+    fireEvent.change(screen.getByLabelText('Routine cadence 1'), { target: { value: '  Weekdays  ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save goal' }))
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      routines: [expect.objectContaining({ title: 'Read for 20 minutes', cadence: 'Weekdays' })],
+    }))
+  })
+
   it('removes optional milestones and closes without saving', () => {
     const map = createSeedMap()
     const onClose = vi.fn()

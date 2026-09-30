@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { User } from 'firebase/auth'
 import { CompassView } from './components/CompassView'
 import { GoalEditor, type GoalEditorValues } from './components/GoalEditor'
+import { RoutineEditor } from './components/RoutineEditor'
 import { MergeDialog } from './components/MergeDialog'
 import {
   firebaseConfigured, isOwner, saveMap, signInOwner, signOutOwner, subscribeToMap, subscribeToOwner,
@@ -9,7 +10,7 @@ import {
 import { addGoal, archiveGoal, mergeGoals, moveGoal, reorderGoal, restoreGoal,
   setFrontierStatus, setSecondaryLinks, toggleVisibleChild } from './domain/map'
 import { createSeedMap } from './domain/seed'
-import type { GoalMap } from './domain/types'
+import type { GoalMap, Routine } from './domain/types'
 import { exportMap, parseMap, validateMap } from './domain/validation'
 
 const LOCAL_KEY = 'soul-compass-preview'
@@ -38,6 +39,7 @@ function applyEditor(map: GoalMap, id: string | null, values: GoalEditorValues):
     ...next.nodes[goalId], title: values.title.trim(), description: optional(values.description),
     current: optional(values.current), target: optional(values.target),
     milestones: values.milestones.length ? values.milestones : undefined,
+    routines: values.routines.length ? values.routines : undefined,
     reminders: values.reminders.length ? values.reminders : undefined,
     note: optional(values.note),
   } } }
@@ -91,6 +93,7 @@ export default function App() {
   const [loading, setLoading] = useState(firebaseConfigured)
   const [editMode, setEditMode] = useState(false)
   const [editorId, setEditorId] = useState<string | null | undefined>()
+  const [routineEditorId, setRoutineEditorId] = useState<string | null>(null)
   const [editorBaseRevision, setEditorBaseRevision] = useState<number | null>(null)
   const [mergeId, setMergeId] = useState<string | null>(null)
   const [loginOpen, setLoginOpen] = useState(false)
@@ -98,11 +101,17 @@ export default function App() {
   const [error, setError] = useState('')
   const canEdit = !firebaseConfigured || (isOwner(owner) && !fromCache)
   const effectiveEditMode = editMode && canEdit
-  const dialogOpen = loginOpen || (canEdit && (editorId !== undefined || mergeId !== null))
+  const dialogOpen = loginOpen || (canEdit && (editorId !== undefined || routineEditorId !== null || mergeId !== null))
 
   function openEditor(id?: string): void {
     setEditorBaseRevision(map.revision)
     setEditorId(id ?? null)
+    setError('')
+  }
+
+  function openRoutineEditor(id: string): void {
+    setEditorBaseRevision(map.revision)
+    setRoutineEditorId(id)
     setError('')
   }
 
@@ -112,11 +121,11 @@ export default function App() {
       setMap(remote ?? createSeedMap())
       setFromCache(cached)
       setLoading(false)
-      if (cached) { setEditMode(false); setEditorId(undefined); setMergeId(null) }
+      if (cached) { setEditMode(false); setEditorId(undefined); setRoutineEditorId(null); setMergeId(null) }
     }, (cause) => { setError(cause.message); setLoading(false) })
     const unsubscribeOwner = subscribeToOwner((user) => {
       setOwner(user)
-      if (!isOwner(user)) { setEditMode(false); setEditorId(undefined); setMergeId(null) }
+      if (!isOwner(user)) { setEditMode(false); setEditorId(undefined); setRoutineEditorId(null); setMergeId(null) }
     })
     return () => { unsubscribeMap(); unsubscribeOwner() }
   }, [])
@@ -147,6 +156,19 @@ export default function App() {
     }
     const saved = await persist((current) => applyEditor(current, editorId ?? null, values))
     if (saved) setEditorId(undefined)
+  }
+
+  async function saveRoutineEditor(routines: Routine[]): Promise<void> {
+    if (editorBaseRevision !== map.revision || !routineEditorId) {
+      setError('The map changed while this editor was open. Close it, review the latest routine, and edit again.')
+      return
+    }
+    const id = routineEditorId
+    const saved = await persist((current) => ({
+      ...current,
+      nodes: { ...current.nodes, [id]: { ...current.nodes[id], routines: routines.length ? routines : undefined } },
+    }))
+    if (saved) setRoutineEditorId(null)
   }
 
   async function importFile(file: File): Promise<void> {
@@ -191,6 +213,7 @@ export default function App() {
     <CompassView map={map} selectedId={selectedId} editMode={effectiveEditMode} canEdit={canEdit} authEnabled={firebaseConfigured} busy={busy}
       onSelect={setSelectedId} onToggleEdit={() => setEditMode((value) => !value)}
       onOpenEditor={openEditor}
+      onOpenRoutineEditor={openRoutineEditor}
       onSetFrontier={(id, status) => { void persist((current) => setFrontierStatus(current, id, status)) }}
       onReorder={(id, direction) => { void persist((current) => reorderGoal(current, id, direction)) }}
       onArchive={(id) => { void persist((current) => archiveGoal(current, id)).then((saved) => {
@@ -202,6 +225,8 @@ export default function App() {
       onSignIn={() => { setError(''); setLoginOpen(true) }} onSignOut={() => { void signOut() }} />
     <GoalEditor map={map} node={editorId ? map.nodes[editorId] : undefined} parentId={selectedId ?? 'understand'}
       open={editorId !== undefined && canEdit} busy={busy} error={error} onClose={() => setEditorId(undefined)} onSave={(values) => { void saveEditor(values) }} />
+    {routineEditorId && canEdit && map.nodes[routineEditorId] && <RoutineEditor key={routineEditorId} node={map.nodes[routineEditorId]}
+      busy={busy} error={error} onClose={() => setRoutineEditorId(null)} onSave={(routines) => { void saveRoutineEditor(routines) }} />}
     <MergeDialog map={map} sourceId={canEdit ? mergeId : null} busy={busy} error={error} onClose={() => setMergeId(null)}
       onMerge={(targetId) => { void persist((current) => mergeGoals(current, mergeId as string, targetId)).then((saved) => {
         if (saved) { setSelectedId(targetId); setMergeId(null) }

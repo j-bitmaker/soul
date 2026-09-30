@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { createSeedMap } from '../domain/seed'
 import type { GoalMap } from '../domain/types'
@@ -10,7 +10,7 @@ function props(map: GoalMap = createSeedMap()): CompassViewProps {
     onSelect: vi.fn(), onToggleEdit: vi.fn(), onOpenEditor: vi.fn(),
     onSetFrontier: vi.fn(), onReorder: vi.fn(), onToggleVisible: vi.fn(),
     onArchive: vi.fn(), onRestore: vi.fn(), onOpenMerge: vi.fn(),
-    onExport: vi.fn(), onImport: vi.fn(), onSignIn: vi.fn(), onSignOut: vi.fn(),
+    onOpenRoutineEditor: vi.fn(), onExport: vi.fn(), onImport: vi.fn(), onSignIn: vi.fn(), onSignOut: vi.fn(),
   }
 }
 
@@ -28,15 +28,50 @@ describe('CompassView', () => {
     const view = props()
     render(<CompassView {...view} />)
     expect(screen.getByRole('heading', { name: 'Soul' })).toBeVisible()
-    expect(screen.getByRole('button', { name: /01 \/ 03.*Understand & Express/ })).toBeVisible()
-    expect(screen.getByRole('button', { name: /02 \/ 03.*Create & Be Free/ })).toBeVisible()
-    expect(screen.getByRole('button', { name: /03 \/ 03.*Self-Mastery/ })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Understand & Express' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Create & Be Free' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Self-Mastery' })).toBeVisible()
+    expect(screen.queryByText('In focus now')).not.toBeInTheDocument()
+    expect(screen.queryByText(/0[1-3] \/ 03/)).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Active Frontier' })).toBeVisible()
-    expect(screen.getByRole('button', { name: /Professional autonomy.*primary/i })).toBeVisible()
-    expect(screen.getByRole('button', { name: /Launch Blog.*active/i })).toBeVisible()
-    expect(screen.getByRole('button', { name: /English C1.*maintain/i })).toBeVisible()
-    fireEvent.click(screen.getByRole('button', { name: /02 \/ 03.*Create & Be Free/ }))
+    expect(screen.getAllByRole('heading', { name: 'Active Frontier' })).toHaveLength(1)
+    expect(screen.getByRole('heading', { name: 'Three directions' }).compareDocumentPosition(
+      screen.getByRole('heading', { name: 'Active Frontier' }),
+    ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const frontier = within(document.querySelector('.frontier-section') as HTMLElement)
+    expect(frontier.getByRole('button', { name: /Professional autonomy.*primary/i })).toBeVisible()
+    expect(frontier.getByRole('button', { name: /Launch Blog.*active/i })).toBeVisible()
+    expect(frontier.getByRole('button', { name: /English C1.*maintain/i })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Create & Be Free' }))
     expect(view.onSelect).toHaveBeenCalledWith('create')
+  })
+
+  it('previews every direct nonarchived goal by status, then manual order', () => {
+    const map = mapWithHiddenAndArchived()
+    map.nodes.understand.childrenIds = ['clear-speech-writing', 'extra-goal', 'english-c1', 'launch-blog', 'theology-scripture', 'philosophy-humanities', 'old-goal']
+    map.frontier = [
+      { nodeId: 'theology-scripture', status: 'primary' },
+      { nodeId: 'launch-blog', status: 'active' },
+      { nodeId: 'english-c1', status: 'maintain' },
+    ]
+    map.nodes['nested-goal'] = { id: 'nested-goal', title: 'Nested goal', parentId: 'launch-blog', childrenIds: [], visibleChildIds: [], secondaryIds: [] }
+    map.nodes['launch-blog'].childrenIds = ['nested-goal']
+    const view = props(map)
+    render(<CompassView {...view} />)
+    const card = document.querySelector('.cluster-card[data-tone="expression"]') as HTMLElement
+    const goalButtons = [...card.querySelectorAll<HTMLButtonElement>('.cluster-goal')]
+    expect(goalButtons.map((button) => button.textContent)).toEqual([
+      expect.stringContaining('Theology / Scripture'),
+      expect.stringContaining('Launch Blog'),
+      expect.stringContaining('English C1'),
+      expect.stringContaining('Clear speech / writing'),
+      expect.stringContaining('Another thought'),
+      expect.stringContaining('Philosophy / humanities'),
+    ])
+    expect(card).not.toHaveTextContent('Former focus')
+    expect(card).not.toHaveTextContent('Nested goal')
+    fireEvent.click(goalButtons[4])
+    expect(view.onSelect).toHaveBeenCalledWith('extra-goal')
   })
 
   it('reveals hidden goals only through All goals while normal focus shows five or fewer', () => {
@@ -78,6 +113,18 @@ describe('CompassView', () => {
     render(<CompassView {...view} />)
     fireEvent.change(screen.getByLabelText('Frontier status'), { target: { value: '' } })
     expect(view.onSetFrontier).toHaveBeenCalledWith('english-c1', null)
+  })
+
+  it('shows direction Routine in overview and focus with a protected edit action', () => {
+    const view = props()
+    const rendered = render(<CompassView {...view} />)
+    const card = document.querySelector('.cluster-card[data-tone="expression"]') as HTMLElement
+    expect(within(card).getByRole('region', { name: 'Routine for Understand & Express' })).toHaveTextContent('Read Bible')
+    rendered.rerender(<CompassView {...view} selectedId="understand" editMode />)
+    expect(screen.getByRole('region', { name: 'Routine for Understand & Express' })).toHaveTextContent('Daily')
+    fireEvent.click(screen.getByRole('button', { name: 'Edit routine' }))
+    expect(view.onOpenRoutineEditor).toHaveBeenCalledWith('understand')
+    expect(screen.queryByRole('button', { name: 'Edit goal' })).not.toBeInTheDocument()
   })
 
   it('exposes goal editing, merging, archiving, relations, and return navigation', () => {

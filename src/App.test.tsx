@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createSeedMap } from './domain/seed'
 import App from './App'
@@ -30,6 +30,10 @@ vi.mock('./data/firebase', () => ({
   MapConflictError: class extends Error {},
 }))
 
+function clickOverviewGoal(name: RegExp): void {
+  fireEvent.click(within(document.querySelector('.cluster-grid') as HTMLElement).getByRole('button', { name }))
+}
+
 describe('Soul compass', () => {
   beforeEach(() => {
     mocks.cached = false
@@ -48,7 +52,7 @@ describe('Soul compass', () => {
     expect(screen.getAllByRole('button', { name: /Create & Be Free/ })[0]).toBeVisible()
     expect(screen.getAllByRole('button', { name: /Self-Mastery/ })[0]).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Active Frontier' })).toBeVisible()
-    expect(screen.getByRole('button', { name: /Professional autonomy/ })).toBeVisible()
+    expect(within(document.querySelector('.frontier-section') as HTMLElement).getByRole('button', { name: /Professional autonomy/ })).toBeVisible()
   })
 
   it('zooms from a cluster into a goal without requiring extra fields', async () => {
@@ -62,7 +66,7 @@ describe('Soul compass', () => {
   it('saves an edited goal through the explicit edit mode', async () => {
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    fireEvent.click(screen.getByRole('button', { name: /Launch Blog/ }))
+    clickOverviewGoal(/Launch Blog/)
     fireEvent.click(screen.getByRole('button', { name: 'Edit goal' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Write publicly' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save goal' }))
@@ -70,11 +74,29 @@ describe('Soul compass', () => {
     expect(await screen.findByRole('heading', { name: 'Write publicly' })).toBeVisible()
   })
 
+  it('edits a direction Routine without changing its protected identity', async () => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Understand & Express' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit routine' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add routine' }))
+    fireEvent.change(screen.getByLabelText('Routine title 2'), { target: { value: '  Pray for others  ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save routine' }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
+    const saved = mocks.saveMap.mock.calls[0][0]
+    expect(saved.nodes.understand.title).toBe('Understand & Express')
+    expect(saved.nodes.understand.parentId).toBe('soul')
+    expect(saved.nodes.understand.routines).toEqual([
+      { id: 'read-bible', title: 'Read Bible', cadence: 'Daily' },
+      expect.objectContaining({ title: 'Pray for others', cadence: undefined }),
+    ])
+  })
+
   it('keeps the editor open and reports a failed save', async () => {
     mocks.saveMap.mockRejectedValueOnce(new Error('Map changed on another device'))
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    fireEvent.click(screen.getByRole('button', { name: /Launch Blog/ }))
+    clickOverviewGoal(/Launch Blog/)
     fireEvent.click(screen.getByRole('button', { name: 'Edit goal' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Write publicly' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save goal' }))
@@ -86,7 +108,8 @@ describe('Soul compass', () => {
   it('preserves focus when archiving fails', async () => {
     mocks.saveMap.mockRejectedValueOnce(new Error('Network unavailable'))
     render(<App />)
-    fireEvent.click((await screen.findAllByRole('button', { name: /Launch Blog/ }))[0])
+    await screen.findByRole('heading', { name: 'Soul' })
+    clickOverviewGoal(/Launch Blog/)
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Network unavailable')
@@ -115,7 +138,8 @@ describe('Soul compass', () => {
 
   it('updates Frontier status through a revision-checked save', async () => {
     render(<App />)
-    fireEvent.click((await screen.findAllByRole('button', { name: /Launch Blog/ }))[0])
+    await screen.findByRole('heading', { name: 'Soul' })
+    clickOverviewGoal(/Launch Blog/)
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     fireEvent.change(screen.getByLabelText('Frontier status'), { target: { value: '' } })
     await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
@@ -125,7 +149,7 @@ describe('Soul compass', () => {
   it('rejects a stale editor draft after a remote map revision arrives', async () => {
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    fireEvent.click(screen.getByRole('button', { name: /Launch Blog/ }))
+    clickOverviewGoal(/Launch Blog/)
     fireEvent.click(screen.getByRole('button', { name: 'Edit goal' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Write publicly' } })
     const remote = createSeedMap()
@@ -140,7 +164,7 @@ describe('Soul compass', () => {
   it('closes editing controls when the map switches to an offline copy', async () => {
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    fireEvent.click(screen.getByRole('button', { name: /Launch Blog/ }))
+    clickOverviewGoal(/Launch Blog/)
     fireEvent.click(screen.getByRole('button', { name: 'Edit goal' }))
     act(() => { mocks.emitMap?.(createSeedMap(), true) })
     expect(await screen.findByText(/Offline copy/)).toBeVisible()

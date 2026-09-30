@@ -145,6 +145,19 @@ describe('Firebase map adapter', () => {
     expect(saved.revision).toBe(4)
   })
 
+  it('omits empty optional Routine fields before writing to Firestore', async () => {
+    const { saveMap } = await import('./firebase')
+    const map = { ...initialMap, nodes: { ...initialMap.nodes,
+      understand: { ...initialMap.nodes.understand, routines: [
+        { id: 'read-bible', title: 'Read Bible', cadence: undefined },
+      ] },
+    } }
+    await saveMap(map)
+    const written = sdk.set.mock.calls[0][1] as GoalMap
+    expect(written.nodes.understand.routines).toEqual([{ id: 'read-bible', title: 'Read Bible' }])
+    expect(written).toStrictEqual(JSON.parse(JSON.stringify(written)))
+  })
+
   it('rejects an outdated map instead of overwriting it', async () => {
     const { saveMap, MapConflictError } = await import('./firebase')
     sdk.state.remoteExists = true

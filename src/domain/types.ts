@@ -6,6 +6,12 @@ export interface Milestone {
   done: boolean
 }
 
+export interface Routine {
+  id: string
+  title: string
+  cadence?: string
+}
+
 export interface GoalNode {
   id: string
   title: string
@@ -17,6 +23,7 @@ export interface GoalNode {
   current?: string
   target?: string
   milestones?: Milestone[]
+  routines?: Routine[]
   reminders?: string[]
   note?: string
   archived?: boolean

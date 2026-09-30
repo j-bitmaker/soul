@@ -15,7 +15,7 @@ import {
   runTransaction,
 } from 'firebase/firestore'
 import type { GoalMap } from '../domain/types'
-import { validateMap } from '../domain/validation'
+import { exportMap, validateMap } from '../domain/validation'
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -144,7 +144,8 @@ export async function saveMap(map: GoalMap): Promise<GoalMap> {
     const remoteRevision = snapshot.exists() ? parseMap(snapshot.data()).revision : 0
     if (remoteRevision !== validMap.revision) throw new MapConflictError()
     const nextMap = { ...validMap, revision: remoteRevision + 1 }
-    transaction.set(mapRef, nextMap)
-    return nextMap
+    const storedMap = JSON.parse(exportMap(nextMap)) as GoalMap
+    transaction.set(mapRef, storedMap)
+    return storedMap
   })
 }

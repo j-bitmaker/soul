@@ -8,6 +8,34 @@ describe('map import and export', () => {
     expect(parseMap(exportMap(map))).toEqual(map)
   })
 
+  it('accepts older maps without routines and preserves routines in JSON', () => {
+    const map = createSeedMap()
+    const legacy = { ...map, nodes: { ...map.nodes,
+      understand: { ...map.nodes.understand, routines: undefined },
+    } }
+    expect(parseMap(JSON.stringify(legacy)).nodes.understand.routines).toBeUndefined()
+    expect(parseMap(exportMap(map)).nodes.understand.routines).toEqual([
+      { id: 'read-bible', title: 'Read Bible', cadence: 'Daily' },
+    ])
+  })
+
+  it('rejects malformed routines and duplicate IDs within a node', () => {
+    const map = createSeedMap()
+    for (const routines of [
+      'Read Bible',
+      [{ id: 'one', title: '   ' }],
+      [{ id: '', title: 'Read' }],
+      [{ id: 'one', title: 'Read', cadence: 1 }],
+      [{ id: 'one', title: 'Read', unknown: true }],
+      [{ id: 'one', title: 'Read' }, { id: 'one', title: 'Pray' }],
+    ]) {
+      const broken = { ...map, nodes: { ...map.nodes,
+        understand: { ...map.nodes.understand, routines },
+      } }
+      expect(() => parseMap(JSON.stringify(broken))).toThrow(/routine|field/i)
+    }
+  })
+
   it('rejects invalid JSON and unknown schema versions', () => {
     expect(() => parseMap('{')).toThrow(/JSON/i)
     const map = { ...createSeedMap(), schemaVersion: 2 }
