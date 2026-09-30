@@ -1,5 +1,5 @@
 import { normalizeFrontier, placeEntry, type WhenFull } from './frontier'
-import { CLUSTER_IDS, ROOT_ID, type FrontierLane, type GoalMap, type GoalNode, type Label } from './types'
+import { CLUSTER_IDS, ROOT_ID, type FrontierLane, type GoalMap, type GoalNode, type Label, type Milestone } from './types'
 
 function requireNode(map: GoalMap, id: string): GoalNode {
   const node = map.nodes[id]
@@ -109,6 +109,64 @@ export function archiveGoal(map: GoalMap, id: string): GoalMap {
       [parent.id]: { ...parent, visibleChildIds: parent.visibleChildIds.filter((childId) => childId !== id) } },
     frontier: normalizeFrontier(map.frontier.filter((entry) => !isWithin(map, entry.nodeId, id))),
   }
+}
+
+export interface NodeDetails {
+  title?: string
+  description?: string
+  current?: string
+  target?: string
+  note?: string
+  labels?: Label[]
+  milestones?: Milestone[]
+  reminders?: string[]
+}
+
+function unique<T>(items: readonly T[], key: (item: T) => string): T[] {
+  const seen = new Set<string>()
+  return items.filter((item) => {
+    const value = key(item)
+    if (seen.has(value)) return false
+    seen.add(value)
+    return true
+  })
+}
+
+const TEXT_FIELDS = ['description', 'current', 'target', 'note'] as const
+
+/**
+ * Changes a goal's own text, labels, milestones, or reminders in one step, as edited in place.
+ * Text is trimmed, blank optional text and emptied lists are removed, blanks and repeated ids are dropped.
+ * Only a goal can be renamed; Soul and the directions keep their names.
+ */
+export function setNodeDetails(map: GoalMap, id: string, details: NodeDetails): GoalMap {
+  const node = requireNode(map, id)
+  if (id === ROOT_ID) throw new Error('Soul is permanent')
+  const { labels, milestones, reminders, description, current, target, note, ...rest } = node
+  const next: GoalNode = { ...rest }
+  if (details.title !== undefined) {
+    if (CLUSTER_IDS.includes(id as typeof CLUSTER_IDS[number])) throw new Error('Soul and clusters are permanent')
+    const title = details.title.trim()
+    if (!title) throw new Error('Title is required')
+    next.title = title
+  }
+  const before = { description, current, target, note }
+  for (const field of TEXT_FIELDS) {
+    const value = (details[field] ?? before[field] ?? '').trim()
+    if (value) next[field] = value
+  }
+  const tidyLabels = details.labels && unique(details.labels.map((item) => ({ ...item, text: item.text.trim() }))
+    .filter((item) => item.id && item.text), (item) => item.id)
+  const tidySteps = details.milestones && unique(details.milestones.map((item) => ({ ...item, title: item.title.trim() }))
+    .filter((item) => item.id && item.title), (item) => item.id)
+  const tidyReminders = details.reminders && unique(details.reminders.map((item) => item.trim()).filter(Boolean), (item) => item)
+  const nextLabels = tidyLabels ?? labels
+  const nextSteps = tidySteps ?? milestones
+  const nextReminders = tidyReminders ?? reminders
+  if (nextLabels?.length) next.labels = nextLabels
+  if (nextSteps?.length) next.milestones = nextSteps
+  if (nextReminders?.length) next.reminders = nextReminders
+  return replaceNode(map, next)
 }
 
 /** The goal and everything nested under it, archived or not. */

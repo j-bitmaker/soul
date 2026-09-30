@@ -27,7 +27,7 @@ test('overview, focus, edit, export, and offline revisit', async ({ page, contex
   await page.getByRole('button', { name: 'Edit', exact: true }).click()
   await page.getByRole('button', { name: 'Edit goal' }).click()
   await page.getByLabel('Name').fill('Professional freedom')
-  await page.getByRole('button', { name: 'Add label' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Add label' }).click()
   await page.getByRole('textbox', { name: 'Label 1' }).fill('Review opportunities · Weekly')
   await page.getByRole('button', { name: 'Save goal' }).click()
   await expect(page.getByRole('heading', { name: 'Professional freedom' })).toBeVisible()
@@ -208,4 +208,64 @@ test('drags a goal with a finger: press the handle, then move', async ({ page, c
   expect(await savedFrontier(page)).toEqual([
     'professional-autonomy:active', 'english-c1:active', 'launch-blog:queued', 'theology-scripture:queued', 'software-ai:queued',
   ])
+})
+
+test('edits a goal in place without edit mode: name, labels, milestones, and a new goal', async ({ page }) => {
+  await page.goto('/#/goal/english-c1')
+  await expect(page.getByRole('heading', { name: 'English C1', level: 1 })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible()
+
+  await page.getByRole('heading', { level: 1 }).getByRole('button').click()
+  await page.getByLabel('Edit name').fill('English C1 fluency')
+  await page.getByLabel('Edit name').press('Enter')
+  await expect(page.getByRole('heading', { name: 'English C1 fluency', level: 1 })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Add label' }).click()
+  await page.getByLabel('New label').fill('Reading')
+  await page.getByLabel('New label').press('Enter')
+  await page.getByLabel('New label').fill('Listening')
+  await page.getByLabel('New label').press('Enter')
+  await page.getByLabel('New label').press('Escape')
+  await expect(page.locator('.focus-meta .label-pill', { hasText: 'Reading' })).toBeVisible()
+  await page.getByRole('button', { name: 'Remove label Listening' }).click()
+  await expect(page.locator('.focus-meta .label-pill', { hasText: 'Listening' })).toHaveCount(0)
+
+  await page.getByLabel('New milestone').fill('Read a novel')
+  await page.getByLabel('New milestone').press('Enter')
+  await page.getByRole('button', { name: 'Read a novel: mark done' }).click()
+  await expect(page.getByRole('button', { name: 'Read a novel: mark not done' })).toHaveAttribute('aria-pressed', 'true')
+
+  await page.getByLabel('New goal').fill('Vocabulary')
+  await page.getByLabel('New goal').press('Enter')
+  await expect(page.locator('.goal-list .goal-row', { hasText: 'Vocabulary' })).toBeVisible()
+
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'English C1 fluency', level: 1 })).toBeVisible()
+  await expect(page.locator('.focus-meta .label-pill', { hasText: 'Reading' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Read a novel: mark not done' })).toBeVisible()
+  await expect(page.locator('.goal-list .goal-row', { hasText: 'Vocabulary' })).toBeVisible()
+})
+
+test('shows one scrolling list per page with the Queue and then the Archive below', async ({ page }) => {
+  await page.goto('/#/goal/understand')
+  await expect(page.getByRole('heading', { name: 'Understand & Express', level: 1 })).toBeVisible()
+  expect(await page.getByRole('button', { name: /page/i }).count()).toBe(0)
+  await expect(page.locator('.goal-queue')).toContainText('Theology / Scripture')
+  const queueBelow = await page.evaluate(() => {
+    const list = document.querySelector('.content-section > .goal-list')!.getBoundingClientRect()
+    const queue = document.querySelector('.goal-queue')!.getBoundingClientRect()
+    return queue.top > list.bottom
+  })
+  expect(queueBelow).toBe(true)
+})
+
+test('keeps a goal page inside the screen on phones', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'mobile', 'This test sets its own viewports')
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 800 })
+    await page.goto('/#/goal/english-c1')
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    await page.getByRole('button', { name: 'Add label' }).click()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  }
 })

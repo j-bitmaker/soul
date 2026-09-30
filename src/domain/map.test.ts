@@ -14,6 +14,7 @@ import {
   reorderGoal,
   restoreGoal,
   setSecondaryLinks,
+  setNodeDetails,
   setVisibleChildren,
   subtreeIds,
   toggleVisibleChild,
@@ -181,6 +182,38 @@ describe('goal map', () => {
     expect(() => deleteGoal(createSeedMap(), 'create')).toThrow(/permanent/i)
     expect(() => deleteGoal(createSeedMap(), 'soul')).toThrow(/permanent/i)
     expect(() => deleteGoal(createSeedMap(), 'missing')).toThrow(/unknown/i)
+  })
+
+  it('changes labels, milestones, and reminders in one step, tidying them and clearing emptied lists', () => {
+    const map = setNodeDetails(createSeedMap(), 'english-c1', {
+      labels: [{ id: 'a', text: '  Speak  ' }, { id: 'a', text: 'Dupe id' }, { id: 'b', text: '   ' }, { id: 'c', text: 'Read' }],
+      milestones: [{ id: 'm', title: ' Novel ', done: true }, { id: '', title: 'No id', done: false }],
+      reminders: [' Daily ', 'Daily', '', 'Weekly'],
+    })
+    expect(map.nodes['english-c1'].labels).toEqual([{ id: 'a', text: 'Speak' }, { id: 'c', text: 'Read' }])
+    expect(map.nodes['english-c1'].milestones).toEqual([{ id: 'm', title: 'Novel', done: true }])
+    expect(map.nodes['english-c1'].reminders).toEqual(['Daily', 'Weekly'])
+    const untouched = setNodeDetails(map, 'english-c1', { labels: [] })
+    expect('labels' in untouched.nodes['english-c1']).toBe(false)
+    expect(untouched.nodes['english-c1'].reminders).toEqual(['Daily', 'Weekly'])
+    expect(() => exportMap(untouched)).not.toThrow()
+    expect(() => exportMap(map)).not.toThrow()
+  })
+
+  it('edits a goal\'s own text in place: trims, clears blanks, keeps the rest, and protects names', () => {
+    let map = setNodeDetails(createSeedMap(), 'english-c1', { title: '  English C2  ', description: ' Talk ', target: '' })
+    expect(map.nodes['english-c1']).toMatchObject({ title: 'English C2', description: 'Talk', current: 'B2-ish' })
+    expect('target' in map.nodes['english-c1']).toBe(false)
+    map = setNodeDetails(map, 'english-c1', { current: '', note: 'Aloud' })
+    expect('current' in map.nodes['english-c1']).toBe(false)
+    expect(map.nodes['english-c1'].note).toBe('Aloud')
+    expect(map.nodes['english-c1'].milestones).toHaveLength(1)
+    expect(() => setNodeDetails(map, 'english-c1', { title: '   ' })).toThrow(/title/i)
+    expect(() => setNodeDetails(map, 'create', { title: 'Renamed' })).toThrow(/permanent/i)
+    expect(() => setNodeDetails(map, 'soul', { labels: [] })).toThrow(/permanent/i)
+    expect(() => setNodeDetails(map, 'missing', { labels: [] })).toThrow(/unknown/i)
+    expect(setNodeDetails(map, 'create', { labels: [{ id: 'x', text: 'Focus' }] }).nodes.create.labels).toEqual([{ id: 'x', text: 'Focus' }])
+    expect(() => exportMap(map)).not.toThrow()
   })
 
   it('restores an archived goal and controls whether it is in view', () => {

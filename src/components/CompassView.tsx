@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowRight, ArrowUp, ChevronRight, Compass, Download, Ellipsis, Eye, EyeOff, LogIn, LogOut, Pencil, Plus, Tag, Trash2, Upload, X } from 'lucide-react'
+import { ArrowRight, ChevronRight, Compass, Download, Ellipsis, LogIn, LogOut, Pencil, Trash2, Upload, X } from 'lucide-react'
 import type { FrontierLane, GoalMap, GoalNode } from '../domain/types'
 import { CLUSTER_IDS, MAX_ACTIVE, ROOT_ID } from '../domain/types'
+import type { NodeDetails } from '../domain/map'
 import { Frontier } from './FrontierBoard'
 import { LabelPills, laneOf, nearestCluster, pathTo, toneById } from './goalView'
+import { EditableLabels, InlineAdd, InlineText } from './InlineEdit'
 
 export interface CompassViewProps {
   map: GoalMap
@@ -15,11 +17,10 @@ export interface CompassViewProps {
   onSelect: (id: string | null) => void
   onToggleEdit: () => void
   onOpenEditor: (id?: string) => void
-  onOpenLabelEditor: (id: string) => void
+  onEditNode: (id: string, details: NodeDetails) => Promise<boolean> | void
+  onAddGoal: (parentId: string, title: string) => Promise<boolean>
   onPlace: (id: string, lane: FrontierLane | null, index?: number, whenFull?: 'bump' | 'reject') => Promise<boolean> | void
   onAddToQueue: (title: string, parentId: string) => Promise<boolean>
-  onReorder: (id: string, direction: -1 | 1) => void
-  onToggleVisible: (parentId: string, childId: string) => void
   onArchive: (id: string) => void
   onRestore: (id: string) => void
   onOpenMerge: (id: string) => void
@@ -37,11 +38,14 @@ function activeChildren(map: GoalMap, id: string): GoalNode[] {
     .filter((node): node is GoalNode => Boolean(node && !node.archived))
 }
 
-/** Direct goals in priority order: Active, then Queue (both in their own order), then the rest in place. */
+/** Direct goals in automatic order: Active (in its order), then the rest in place, then the Queue (in its order). */
 function priorityChildren(map: GoalMap, id: string): GoalNode[] {
-  const order = new Map(map.frontier.map((entry, index) => [entry.nodeId, index]))
-  return activeChildren(map, id).sort((left, right) =>
-    (order.get(left.id) ?? map.frontier.length) - (order.get(right.id) ?? map.frontier.length))
+  const rank = (goalId: string): number => {
+    const index = map.frontier.findIndex((entry) => entry.nodeId === goalId)
+    if (index < 0) return map.frontier.length
+    return map.frontier[index].status === 'queued' ? map.frontier.length * 2 + index : index
+  }
+  return activeChildren(map, id).sort((left, right) => rank(left.id) - rank(right.id))
 }
 
 function Header(props: CompassViewProps) {
@@ -125,7 +129,6 @@ function Overview({ props }: { props: CompassViewProps }) {
       })}</div>
     </section>
     <Frontier props={props} />
-    {props.editMode && <div className="edit-toolbar"><p>Add a goal under any direction.</p><button className="subtle-button" onClick={() => props.onOpenEditor()}><Plus aria-hidden="true" /> New goal</button></div>}
     <p className="footer-note">See clearly. Choose one thing. Begin.</p>
   </main>
 }
@@ -140,70 +143,82 @@ function Breadcrumb({ map, node, onSelect }: { map: GoalMap; node: GoalNode; onS
   </nav>
 }
 
-function EditRow({ props, parent, node, index, total }: { props: CompassViewProps; parent: GoalNode; node: GoalNode; index: number; total: number }) {
-  const visible = parent.visibleChildIds.includes(node.id)
-  const full = parent.visibleChildIds.length >= 5
-  return <div className="edit-row" aria-label={`Edit ${node.title}`}>
-    <button className="icon-button" title={visible ? 'Hide from view' : 'Show in view'} aria-label={`${visible ? 'Hide' : 'Show'} ${node.title} ${visible ? 'from' : 'in'} view`} aria-pressed={visible} disabled={props.busy || (!visible && full)} onClick={() => props.onToggleVisible(parent.id, node.id)}>{visible ? <Eye aria-hidden="true" /> : <EyeOff aria-hidden="true" />}</button>
-    <button className="icon-button" title="Move up" aria-label={`Move ${node.title} up`} disabled={index === 0 || props.busy} onClick={() => props.onReorder(node.id, -1)}><ArrowUp aria-hidden="true" /></button>
-    <button className="icon-button" title="Move down" aria-label={`Move ${node.title} down`} disabled={index === total - 1 || props.busy} onClick={() => props.onReorder(node.id, 1)}><ArrowDown aria-hidden="true" /></button>
+function GoalRow({ props, child }: { props: CompassViewProps; child: GoalNode }) {
+  const lane = laneOf(props.map, child.id)
+  return <div className="frontier-row">
+    <button className="goal-row" onClick={() => props.onSelect(child.id)}>
+      <span className="goal-row-main"><span className="goal-row-title">{child.title}</span>{(child.description || child.current) && <span className="goal-row-detail">{child.description || child.current}</span>}<LabelPills labels={child.labels} /></span>
+      {lane === 'active' && <span className="lane-mark" data-lane="active"><span className="visually-hidden">In focus</span></span>}
+      <ArrowRight aria-hidden="true" />
+    </button>
   </div>
 }
 
-function PageControls({ page, total, label, onPage }: { page: number; total: number; label: string; onPage: (page: number) => void }) {
-  if (total < 2) return null
-  const prefix = label === 'goal' ? '' : `${label} `
-  return <nav className="pagination" aria-label={`${label} pages`}>
-    <button className="subtle-button" aria-label={`Previous ${prefix}page`} disabled={page === 0} onClick={() => onPage(page - 1)}>Previous</button>
-    <span aria-live="polite">Page {page + 1} of {total}</span>
-    <button className="subtle-button" aria-label={`Next ${prefix}page`} disabled={page === total - 1} onClick={() => onPage(page + 1)}>Next</button>
-  </nav>
-}
-
+/** All goals of a page in one scrolling list: Active and the rest first, the Queue below them, the Archive last. */
 function ChildList({ props, node }: { props: CompassViewProps; node: GoalNode }) {
-  const children = activeChildren(props.map, node.id)
+  const owner = props.canEdit
+  const children = priorityChildren(props.map, node.id)
+  const main = children.filter((child) => laneOf(props.map, child.id) !== 'queue')
+  const queued = children.filter((child) => laneOf(props.map, child.id) === 'queue')
   const archived = node.childrenIds.map((id) => props.map.nodes[id]).filter((child): child is GoalNode => Boolean(child?.archived))
-  const [showAll, setShowAll] = useState(false)
-  const [page, setPage] = useState(0)
-  const [archivedPage, setArchivedPage] = useState(0)
-  const allMode = props.editMode || showAll
-  const totalPages = Math.max(1, Math.ceil(children.length / 5))
-  const currentPage = Math.min(page, totalPages - 1)
-  const totalArchivedPages = Math.max(1, Math.ceil(archived.length / 5))
-  const currentArchivedPage = Math.min(archivedPage, totalArchivedPages - 1)
-  const shown = allMode ? children.slice(currentPage * 5, currentPage * 5 + 5) : node.visibleChildIds.map((id) => props.map.nodes[id]).filter((child): child is GoalNode => Boolean(child && !child.archived)).slice(0, 5)
-  if (!children.length && !props.editMode) return null
-  return <section className="content-section" aria-labelledby="goals-title">
-    <h2 id="goals-title">{node.id === ROOT_ID ? 'Directions' : 'Goals in view'}</h2>
-    <div className={`goal-list${props.editMode ? ' editing' : ''}`}>{shown.map((child, index) => <div className="frontier-row" key={child.id}>
-      <button className="goal-row" onClick={() => props.onSelect(child.id)}>
-        <span className="goal-row-main"><span className="goal-row-title">{child.title}</span>{(child.description || child.current) && <span className="goal-row-detail">{child.description || child.current}</span>}<LabelPills labels={child.labels} /></span>
-        <ArrowRight aria-hidden="true" />
-      </button>
-      {props.editMode && <EditRow props={props} parent={node} node={child} index={currentPage * 5 + index} total={children.length} />}
-    </div>)}</div>
+  if (!children.length && !owner) return null
+  return <section className="content-section" aria-labelledby="goals-title" data-tone={toneById[nearestCluster(props.map, node.id)?.id ?? '']}>
+    <h2 id="goals-title">{node.id === ROOT_ID ? 'Directions' : 'Goals'}</h2>
+    {main.length > 0 && <div className="goal-list">{main.map((child) => <GoalRow key={child.id} props={props} child={child} />)}</div>}
     {!children.length && <p className="empty-note">Nothing here yet. A single meaningful goal is enough.</p>}
-    {!props.editMode && children.length > node.visibleChildIds.length && <div className="list-footer"><button className="text-button" onClick={() => { setShowAll(!showAll); setPage(0) }}>{showAll ? 'Show less' : `All goals (${children.length})`} <ArrowRight aria-hidden="true" /></button></div>}
-    {allMode && <PageControls page={currentPage} total={totalPages} label="goal" onPage={setPage} />}
-    {props.editMode && archived.length > 0 && <div className="archived-section"><h3>Archived</h3>{archived.slice(currentArchivedPage * 5, currentArchivedPage * 5 + 5).map((child) => <div className="archived-row" key={child.id}><span>{child.title}</span><span className="archived-actions"><button className="text-button" onClick={() => props.onRestore(child.id)}>Restore</button><button className="text-button danger" aria-label={`Delete ${child.title}`} onClick={() => props.onDelete(child.id)}>Delete</button></span></div>)}<PageControls page={currentArchivedPage} total={totalArchivedPages} label="archived" onPage={setArchivedPage} /></div>}
-    {props.editMode && <div className="list-footer"><button className="text-button" onClick={() => props.onOpenEditor()}><Plus aria-hidden="true" /> Add goal</button></div>}
+    {owner && <InlineAdd label="New goal" action="Add goal" placeholder="Add a goal…" disabled={props.busy} onAdd={(title) => props.onAddGoal(node.id, title)} />}
+    {queued.length > 0 && <div className="goal-queue"><h3>Queue</h3><div className="goal-list">{queued.map((child) => <GoalRow key={child.id} props={props} child={child} />)}</div></div>}
+    {owner && archived.length > 0 && <div className="archived-section"><h3>Archive</h3>{archived.map((child) => <div className="archived-row" key={child.id}><span>{child.title}</span><span className="archived-actions"><button className="text-button" aria-label={`Restore ${child.title}`} onClick={() => props.onRestore(child.id)}>Restore</button><button className="text-button danger" aria-label={`Delete ${child.title}`} onClick={() => props.onDelete(child.id)}>Delete</button></span></div>)}</div>}
   </section>
 }
 
-function Annotations({ node }: { node: GoalNode }) {
-  const hasProgress = Boolean(node.current || node.target || node.milestones?.length)
-  const hasOther = Boolean(node.reminders?.length || node.note)
-  const nextMilestoneIndex = node.milestones?.findIndex((item) => !item.done) ?? -1
-  if (!hasProgress && !hasOther) return null
+function Annotations({ props, node }: { props: CompassViewProps; node: GoalNode }) {
+  const editable = props.canEdit && node.id !== ROOT_ID && !CLUSTER_IDS.includes(node.id as typeof CLUSTER_IDS[number])
+  const milestones = node.milestones ?? []
+  const reminders = node.reminders ?? []
+  const hasProgress = Boolean(node.current || node.target || milestones.length)
+  const hasOther = Boolean(reminders.length || node.note)
+  const nextMilestoneIndex = milestones.findIndex((item) => !item.done)
+  if (!editable && !hasProgress && !hasOther) return null
+  const edit = (details: NodeDetails) => props.onEditNode(node.id, details)
   return <aside aria-label="Goal details">
-    {hasProgress && <section className="content-section"><h2>Progress</h2><div className="annotation-grid">
-      {node.current && <div className="annotation-block"><p className="annotation-label">Current</p><p className="annotation-value">{node.current}</p></div>}
-      {node.milestones?.length ? <div className="annotation-block"><p className="annotation-label">Milestones</p><ol className="milestone-list">{node.milestones.map((milestone, index) => <li className={milestone.done ? 'done' : index === nextMilestoneIndex ? 'current' : ''} key={milestone.id}>{milestone.title}</li>)}</ol></div> : null}
-      {node.target && <div className="annotation-block"><p className="annotation-label">Target</p><p className="annotation-value">{node.target}</p></div>}
+    {(hasProgress || editable) && <section className="content-section"><h2>Progress</h2><div className="annotation-grid">
+      {(node.current || editable) && <div className="annotation-block"><p className="annotation-label">Current</p><p className="annotation-value">{editable
+        ? <InlineText editable multiline label="current state" placeholder="Where things stand" value={node.current ?? ''} onSave={(current) => edit({ current })} />
+        : node.current}</p></div>}
+      {(milestones.length > 0 || editable) && <div className="annotation-block"><p className="annotation-label">Milestones</p>
+        {milestones.length > 0 && <ol className={`milestone-list${editable ? ' editable' : ''}`}>{milestones.map((milestone, index) => <li className={milestone.done ? 'done' : index === nextMilestoneIndex ? 'current' : ''} key={milestone.id}>
+          {editable
+            ? <>
+              <button type="button" className="milestone-toggle" aria-pressed={milestone.done} disabled={props.busy}
+                aria-label={`${milestone.title}: mark ${milestone.done ? 'not done' : 'done'}`}
+                onClick={() => edit({ milestones: milestones.map((item) => item.id === milestone.id ? { ...item, done: !item.done } : item) })} />
+              <span className="row-text">{milestone.title}</span>
+              <button type="button" className="row-remove" disabled={props.busy} aria-label={`Remove milestone ${milestone.title}`}
+                onClick={() => edit({ milestones: milestones.filter((item) => item.id !== milestone.id) })}><X aria-hidden="true" /></button>
+            </>
+            : milestone.title}
+        </li>)}</ol>}
+        {editable && <InlineAdd label="New milestone" action="Add milestone" placeholder="Add a milestone…" disabled={props.busy}
+          onAdd={(title) => edit({ milestones: [...milestones, { id: crypto.randomUUID(), title, done: false }] })} />}
+      </div>}
+      {(node.target || editable) && <div className="annotation-block"><p className="annotation-label">Target</p><p className="annotation-value">{editable
+        ? <InlineText editable multiline label="target" placeholder="The desired state" value={node.target ?? ''} onSave={(target) => edit({ target })} />
+        : node.target}</p></div>}
     </div></section>}
-    {hasOther && <section className="content-section"><h2>Remember</h2>
-      {node.reminders?.length ? <ul className="reminder-list">{node.reminders.map((reminder, index) => <li key={`${index}-${reminder}`}>{reminder}</li>)}</ul> : null}
-      {node.note && <blockquote className="note-quote">{node.note}</blockquote>}
+    {(hasOther || editable) && <section className="content-section"><h2>Remember</h2>
+      {reminders.length > 0 && <ul className={`reminder-list${editable ? ' editable' : ''}`}>{reminders.map((reminder, index) => <li key={`${index}-${reminder}`}>
+        {editable
+          ? <><span className="row-text">{reminder}</span>
+            <button type="button" className="row-remove" disabled={props.busy} aria-label={`Remove reminder ${reminder}`}
+              onClick={() => edit({ reminders: reminders.filter((_, at) => at !== index) })}><X aria-hidden="true" /></button></>
+          : reminder}
+      </li>)}</ul>}
+      {editable && <InlineAdd label="New reminder" action="Add reminder" placeholder="Add a reminder…" disabled={props.busy}
+        onAdd={(text) => edit({ reminders: [...reminders, text] })} />}
+      {(node.note || editable) && <blockquote className="note-quote">{editable
+        ? <InlineText editable multiline label="note" placeholder="A thought worth keeping (the map is public)" value={node.note ?? ''} onSave={(note) => edit({ note })} />
+        : node.note}</blockquote>}
     </section>}
   </aside>
 }
@@ -215,17 +230,22 @@ function Focus({ props, node }: { props: CompassViewProps; node: GoalNode }) {
   const activeFull = props.map.frontier.filter((entry) => entry.status !== 'queued').length >= MAX_ACTIVE
   const isProtected = node.id === ROOT_ID || CLUSTER_IDS.includes(node.id as typeof CLUSTER_IDS[number])
   const isLeaf = activeChildren(props.map, node.id).length === 0
+  const ownGoal = props.canEdit && !isProtected
   return <main className="page" id="main-content">
     <Breadcrumb map={props.map} node={node} onSelect={props.onSelect} />
     <div className="focus-header">
       <div className="focus-kicker" data-tone={toneById[cluster?.id ?? 'understand']}><span className="alive-dot" /><span className="eyebrow">{isProtected ? 'Direction' : 'Goal in focus'}</span></div>
-      <h1 className="detail-title">{node.title}</h1>
-      {node.description && <p className="detail-description">{node.description}</p>}
-      <div className="focus-meta"><LabelPills labels={node.labels} />{cluster && !isProtected && <button className="relation-chip" onClick={() => props.onSelect(cluster.id)}>{cluster.title}</button>}{secondary.map((item) => <button className="relation-chip secondary" onClick={() => props.onSelect(item.id)} key={item.id}>Also {item.title}</button>)}</div>
+      <h1 className="detail-title">{ownGoal
+        ? <InlineText editable required label="name" placeholder="Name" value={node.title} onSave={(title) => props.onEditNode(node.id, { title })} />
+        : node.title}</h1>
+      {(node.description || ownGoal) && <p className="detail-description">{ownGoal
+        ? <InlineText editable multiline label="meaning" placeholder="Add a meaning: why this matters" value={node.description ?? ''} onSave={(description) => props.onEditNode(node.id, { description })} />
+        : node.description}</p>}
+      <div className="focus-meta">{props.canEdit && node.id !== ROOT_ID
+        ? <EditableLabels labels={node.labels ?? []} disabled={props.busy} onChange={(labels) => props.onEditNode(node.id, { labels })} />
+        : <LabelPills labels={node.labels} />}{cluster && !isProtected && <button className="relation-chip" onClick={() => props.onSelect(cluster.id)}>{cluster.title}</button>}{secondary.map((item) => <button className="relation-chip secondary" onClick={() => props.onSelect(item.id)} key={item.id}>Also {item.title}</button>)}</div>
       {props.editMode && <div className="focus-actions">
-        {node.id !== ROOT_ID && <button className="subtle-button" onClick={() => props.onOpenLabelEditor(node.id)}><Tag aria-hidden="true" /> Edit labels</button>}
         {!isProtected && <button className="subtle-button" onClick={() => props.onOpenEditor(node.id)}><Pencil aria-hidden="true" /> Edit goal</button>}
-        <button className="subtle-button" onClick={() => props.onOpenEditor()}><Plus aria-hidden="true" /> Add within</button>
         {!isProtected && <select aria-label="Priority" value={lane ?? ''} onChange={(event) => props.onPlace(node.id, (event.target.value || null) as FrontierLane | null)}>
           <option value="">Not prioritised</option><option value="queue">Queue</option>
           <option value="active" disabled={activeFull && lane !== 'active'}>{activeFull && lane !== 'active' ? 'Active (full)' : 'Active'}</option>
@@ -235,7 +255,7 @@ function Focus({ props, node }: { props: CompassViewProps; node: GoalNode }) {
         {!isProtected && <button className="subtle-button danger" onClick={() => props.onDelete(node.id)}><Trash2 aria-hidden="true" /> Delete</button>}
       </div>}
     </div>
-    <div className={`focus-layout${isLeaf && !props.editMode ? ' leaf' : ''}`}><ChildList key={node.id} props={props} node={node} /><Annotations node={node} /></div>
+    <div className={`focus-layout${isLeaf && !props.canEdit ? ' leaf' : ''}`}><ChildList key={node.id} props={props} node={node} /><Annotations props={props} node={node} /></div>
   </main>
 }
 

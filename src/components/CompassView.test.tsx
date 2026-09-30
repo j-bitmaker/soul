@@ -8,9 +8,9 @@ function props(map: GoalMap = createSeedMap()): CompassViewProps {
   return {
     map, selectedId: null, editMode: false, canEdit: true,
     onSelect: vi.fn(), onToggleEdit: vi.fn(), onOpenEditor: vi.fn(),
-    onPlace: vi.fn(), onAddToQueue: vi.fn(async () => true), onReorder: vi.fn(), onToggleVisible: vi.fn(),
+    onPlace: vi.fn(), onAddToQueue: vi.fn(async () => true), onEditNode: vi.fn(async () => true), onAddGoal: vi.fn(async () => true),
     onArchive: vi.fn(), onRestore: vi.fn(), onOpenMerge: vi.fn(), onDelete: vi.fn(),
-    onOpenLabelEditor: vi.fn(), onExport: vi.fn(), onImport: vi.fn(), onSignIn: vi.fn(), onSignOut: vi.fn(),
+    onExport: vi.fn(), onImport: vi.fn(), onSignIn: vi.fn(), onSignOut: vi.fn(),
   }
 }
 
@@ -192,7 +192,7 @@ describe('CompassView', () => {
     expect(within(card).getByRole('button', { name: /Philosophy/ }).querySelector('.lane-mark')).toBeNull()
   })
 
-  it('previews every direct nonarchived goal by priority, then manual order', () => {
+  it('previews every direct nonarchived goal: Active first, then the rest, then the Queue', () => {
     const map = mapWithHiddenAndArchived()
     map.nodes.understand.childrenIds = ['clear-speech-writing', 'extra-goal', 'english-c1', 'launch-blog', 'theology-scripture', 'philosophy-humanities', 'old-goal']
     map.frontier = [
@@ -220,38 +220,39 @@ describe('CompassView', () => {
     expect(view.onSelect).toHaveBeenCalledWith('extra-goal')
   })
 
-  it('reveals hidden goals only through All goals while normal focus shows five or fewer', () => {
-    const view = { ...props(mapWithHiddenAndArchived()), selectedId: 'understand' }
-    render(<CompassView {...view} />)
-    expect(screen.getByRole('heading', { name: 'Understand & Express' })).toBeVisible()
-    expect(screen.queryByRole('button', { name: /Another thought/ })).not.toBeInTheDocument()
+  it('lists every goal of a page in one scrolling list: the rest first, then the Queue, then the Archive for the owner', () => {
+    const map = mapWithHiddenAndArchived()
+    map.frontier.push({ nodeId: 'extra-goal', status: 'queued' })
+    const rendered = render(<CompassView {...props(map)} selectedId="understand" />)
+    expect(screen.getByRole('heading', { name: 'Understand & Express', level: 1 })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /All goals/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Next page|Previous page/ })).not.toBeInTheDocument()
+    expect(document.querySelector('.pagination')).toBeNull()
+    const titles = (selector: string) => [...document.querySelectorAll(`${selector} .goal-row-title`)].map((node) => node.textContent)
+    expect(titles('.content-section > .goal-list')).toEqual([
+      'Launch Blog', 'English C1', 'Clear speech / writing', 'Philosophy / humanities',
+    ])
+    expect(titles('.goal-queue')).toEqual(['Theology / Scripture', 'Another thought'])
+    const section = document.querySelector('[aria-labelledby="goals-title"]') as HTMLElement
+    const order = [...section.children].map((child) => child.className || child.tagName)
+    expect(order.indexOf('goal-queue')).toBeGreaterThan(order.indexOf('goal-list'))
+    expect(order.indexOf('archived-section')).toBeGreaterThan(order.indexOf('goal-queue'))
+    expect(within(section.querySelector('.archived-section') as HTMLElement).getByText('Former focus')).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Move .* (up|down)$/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /(Hide|Show) .* (from|in) view/ })).not.toBeInTheDocument()
+    rendered.rerender(<CompassView {...props(map)} selectedId="understand" canEdit={false} />)
     expect(screen.queryByText('Former focus')).not.toBeInTheDocument()
-    expect(document.querySelectorAll('.goal-list .goal-row')).toHaveLength(4)
-    fireEvent.click(screen.getByRole('button', { name: /All goals/ }))
-    expect(document.querySelectorAll('.goal-list .goal-row')).toHaveLength(5)
-    expect(screen.queryByRole('button', { name: /Another thought/ })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
-    expect(document.querySelectorAll('.goal-list .goal-row')).toHaveLength(1)
-    expect(screen.getByRole('button', { name: /Another thought/ })).toBeVisible()
-    fireEvent.click(screen.getByRole('button', { name: 'Previous page' }))
-    expect(document.querySelectorAll('.goal-list .goal-row')).toHaveLength(5)
-    expect(screen.queryByText('Former focus')).not.toBeInTheDocument()
+    expect(document.querySelector('.archived-section')).toBeNull()
+    expect(titles('.goal-queue')).toEqual(['Theology / Scripture', 'Another thought'])
   })
 
-  it('offers view, order, and restore controls only in edit mode', () => {
-    const view = { ...props(mapWithHiddenAndArchived()), selectedId: 'understand', editMode: true }
+  it('lets the owner restore or delete an archived goal right from the list', () => {
+    const view = { ...props(mapWithHiddenAndArchived()), selectedId: 'understand' }
     render(<CompassView {...view} />)
-    expect(document.querySelectorAll('.goal-list .goal-row')).toHaveLength(5)
-    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
-    fireEvent.click(screen.getByRole('button', { name: /Show Another thought in view/ }))
-    expect(view.onToggleVisible).toHaveBeenCalledWith('understand', 'extra-goal')
-    fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Restore Former focus' }))
     expect(view.onRestore).toHaveBeenCalledWith('old-goal')
-    fireEvent.click(screen.getByRole('button', { name: /Move Another thought up/ }))
-    expect(view.onReorder).toHaveBeenCalledWith('extra-goal', -1)
-    fireEvent.click(screen.getByRole('button', { name: 'Previous page' }))
-    fireEvent.click(screen.getByRole('button', { name: /Hide Theology \/ Scripture from view/ }))
-    expect(view.onToggleVisible).toHaveBeenCalledWith('understand', 'theology-scripture')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Former focus' }))
+    expect(view.onDelete).toHaveBeenCalledWith('old-goal')
   })
 
   it('changes a goal\'s priority from the goal page in edit mode', () => {
@@ -274,7 +275,7 @@ describe('CompassView', () => {
     expect(screen.getByRole('option', { name: 'Active' })).toBeEnabled()
   })
 
-  it('shows labels as pills in the overview and on goal pages, with an Edit labels action', () => {
+  it('shows labels as pills in the overview and lets the owner edit them right on the page', () => {
     const map = structuredClone(createSeedMap())
     map.nodes['english-c1'].labels = [{ id: 'speak', text: 'Speaking practice' }, { id: 'write', text: 'Weekly writing' }]
     const view = props(map)
@@ -284,24 +285,120 @@ describe('CompassView', () => {
     expect(within(document.querySelector('.frontier-section') as HTMLElement).getByRole('button', { name: /^English C1/ }))
       .toHaveTextContent('Speaking practiceWeekly writing')
     expect(document.body).not.toHaveTextContent('Routine')
-    rendered.rerender(<CompassView {...view} selectedId="understand" editMode />)
-    expect(document.querySelector('.focus-meta')).toHaveTextContent('Read Bible · Daily')
-    fireEvent.click(screen.getByRole('button', { name: 'Edit labels' }))
-    expect(view.onOpenLabelEditor).toHaveBeenCalledWith('understand')
-    expect(screen.queryByRole('button', { name: 'Edit goal' })).not.toBeInTheDocument()
     rendered.rerender(<CompassView {...view} selectedId="english-c1" />)
-    expect(document.querySelector('.focus-meta')).toHaveTextContent('Speaking practice')
+    fireEvent.click(screen.getByRole('button', { name: 'Remove label Weekly writing' }))
+    expect(view.onEditNode).toHaveBeenLastCalledWith('english-c1', { labels: [{ id: 'speak', text: 'Speaking practice' }] })
+    fireEvent.click(screen.getByRole('button', { name: 'Edit label Speaking practice' }))
+    fireEvent.change(screen.getByLabelText('Rename label Speaking practice'), { target: { value: '  Speaking  ' } })
+    fireEvent.keyDown(screen.getByLabelText('Rename label Speaking practice'), { key: 'Enter' })
+    expect(view.onEditNode).toHaveBeenLastCalledWith('english-c1', { labels: [{ id: 'speak', text: 'Speaking' }, { id: 'write', text: 'Weekly writing' }] })
+    fireEvent.click(screen.getByRole('button', { name: 'Add label' }))
+    fireEvent.change(screen.getByLabelText('New label'), { target: { value: 'Reading' } })
+    fireEvent.keyDown(screen.getByLabelText('New label'), { key: 'Enter' })
+    expect(view.onEditNode).toHaveBeenLastCalledWith('english-c1', { labels: [
+      { id: 'speak', text: 'Speaking practice' }, { id: 'write', text: 'Weekly writing' }, { id: expect.any(String), text: 'Reading' },
+    ] })
+    expect(screen.getByLabelText('New label')).toHaveFocus()
+    fireEvent.keyDown(screen.getByLabelText('New label'), { key: 'Escape' })
+    expect(screen.queryByLabelText('New label')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit labels' })).not.toBeInTheDocument()
+  })
+
+  it('lets the owner label a direction on its page, and shows visitors plain pills', () => {
+    const view = { ...props(), selectedId: 'understand' }
+    const rendered = render(<CompassView {...view} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove label Read Bible · Daily' }))
+    expect(view.onEditNode).toHaveBeenCalledWith('understand', { labels: [] })
+    rendered.rerender(<CompassView {...view} canEdit={false} />)
+    expect(document.querySelector('.focus-meta')).toHaveTextContent('Read Bible · Daily')
+    expect(screen.queryByRole('button', { name: /label/i })).not.toBeInTheDocument()
+  })
+
+  it('lets the owner add goals, milestones, and reminders in place, and tick a milestone', () => {
+    const view = { ...props(), selectedId: 'english-c1' }
+    render(<CompassView {...view} />)
+    fireEvent.change(screen.getByLabelText('New goal'), { target: { value: '  Vocabulary  ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add goal' }))
+    expect(view.onAddGoal).toHaveBeenCalledWith('english-c1', 'Vocabulary')
+    fireEvent.change(screen.getByLabelText('New milestone'), { target: { value: 'Read a novel' } })
+    fireEvent.keyDown(screen.getByLabelText('New milestone'), { key: 'Enter' })
+    fireEvent.submit(screen.getByLabelText('New milestone').closest('form') as HTMLFormElement)
+    expect(view.onEditNode).toHaveBeenCalledWith('english-c1', { milestones: [
+      { id: 'fluent-conversation', title: 'Discuss complex topics fluently', done: false },
+      { id: expect.any(String), title: 'Read a novel', done: false },
+    ] })
+    fireEvent.click(screen.getByRole('button', { name: 'Discuss complex topics fluently: mark done' }))
+    expect(view.onEditNode).toHaveBeenCalledWith('english-c1', { milestones: [{ id: 'fluent-conversation', title: 'Discuss complex topics fluently', done: true }] })
+    fireEvent.click(screen.getByRole('button', { name: 'Remove milestone Discuss complex topics fluently' }))
+    expect(view.onEditNode).toHaveBeenCalledWith('english-c1', { milestones: [] })
+    fireEvent.change(screen.getByLabelText('New reminder'), { target: { value: 'Listen daily' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add reminder' }))
+    expect(view.onEditNode).toHaveBeenCalledWith('english-c1', { reminders: ['Speaking practice', 'Writing', 'Grammar', 'Reading', 'Listen daily'] })
+    fireEvent.click(screen.getByRole('button', { name: 'Remove reminder Writing' }))
+    expect(view.onEditNode).toHaveBeenCalledWith('english-c1', { reminders: ['Speaking practice', 'Grammar', 'Reading'] })
+  })
+
+  it('lets the owner edit the name, meaning, current state, target, and note where they are shown', () => {
+    const view = { ...props(), selectedId: 'english-c1' }
+    render(<CompassView {...view} />)
+    fireEvent.click(within(screen.getByRole('heading', { level: 1 })).getByRole('button'))
+    fireEvent.change(screen.getByLabelText('Edit name'), { target: { value: '  English C2  ' } })
+    fireEvent.keyDown(screen.getByLabelText('Edit name'), { key: 'Enter' })
+    expect(view.onEditNode).toHaveBeenLastCalledWith('english-c1', { title: 'English C2' })
+    fireEvent.click(screen.getByRole('button', { name: /Add a meaning/ }))
+    fireEvent.change(screen.getByLabelText('Edit meaning'), { target: { value: 'Talk with anyone' } })
+    fireEvent.blur(screen.getByLabelText('Edit meaning'))
+    expect(view.onEditNode).toHaveBeenLastCalledWith('english-c1', { description: 'Talk with anyone' })
+    fireEvent.click(screen.getByRole('button', { name: 'B2-ish' }))
+    fireEvent.change(screen.getByLabelText('Edit current state'), { target: { value: '' } })
+    fireEvent.blur(screen.getByLabelText('Edit current state'))
+    expect(view.onEditNode).toHaveBeenLastCalledWith('english-c1', { current: '' })
+    fireEvent.click(screen.getByRole('button', { name: 'C1' }))
+    fireEvent.change(screen.getByLabelText('Edit target'), { target: { value: 'C2' } })
+    fireEvent.keyDown(screen.getByLabelText('Edit target'), { key: 'Enter', ctrlKey: true })
+    expect(view.onEditNode).toHaveBeenLastCalledWith('english-c1', { target: 'C2' })
+    fireEvent.click(screen.getByRole('button', { name: /A thought worth keeping/ }))
+    fireEvent.change(screen.getByLabelText('Edit note'), { target: { value: 'Practise aloud' } })
+    fireEvent.blur(screen.getByLabelText('Edit note'))
+    expect(view.onEditNode).toHaveBeenLastCalledWith('english-c1', { note: 'Practise aloud' })
+  })
+
+  it('does not save unchanged text, cancels on Escape, and never blanks the name', () => {
+    const view = { ...props(), selectedId: 'english-c1' }
+    render(<CompassView {...view} />)
+    const name = () => within(screen.getByRole('heading', { level: 1 })).getByRole('button')
+    fireEvent.click(name())
+    fireEvent.keyDown(screen.getByLabelText('Edit name'), { key: 'Enter' })
+    fireEvent.click(name())
+    fireEvent.change(screen.getByLabelText('Edit name'), { target: { value: '   ' } })
+    fireEvent.blur(screen.getByLabelText('Edit name'))
+    fireEvent.click(name())
+    fireEvent.change(screen.getByLabelText('Edit name'), { target: { value: 'Something else' } })
+    fireEvent.keyDown(screen.getByLabelText('Edit name'), { key: 'Escape' })
+    expect(view.onEditNode).not.toHaveBeenCalled()
+    expect(name()).toHaveTextContent('English C1')
+  })
+
+  it('gives visitors plain text and no inline controls on a goal page', () => {
+    render(<CompassView {...props()} selectedId="english-c1" canEdit={false} />)
+    expect(screen.getByRole('heading', { name: 'English C1', level: 1 })).toBeVisible()
+    expect(within(screen.getByRole('heading', { level: 1 })).queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('New goal')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Add (label|milestone|reminder)/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /mark (done|not done)/ })).not.toBeInTheDocument()
+    expect(screen.getByText('B2-ish')).toBeVisible()
+    expect(screen.queryByText(/Add a meaning/)).not.toBeInTheDocument()
   })
 
   it('keeps a goal page without sub-goals quiet for readers and inviting for the owner', () => {
     const view = { ...props(), selectedId: 'launch-blog' }
-    const rendered = render(<CompassView {...view} />)
+    const rendered = render(<CompassView {...view} canEdit={false} />)
     expect(screen.queryByText(/Nothing here yet/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Goals in view' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Goals' })).not.toBeInTheDocument()
     expect(document.querySelector('.focus-layout')).toHaveClass('leaf')
-    rendered.rerender(<CompassView {...view} editMode />)
+    rendered.rerender(<CompassView {...view} />)
     expect(screen.getByText(/Nothing here yet/)).toBeVisible()
+    expect(screen.getByLabelText('New goal')).toBeVisible()
     expect(document.querySelector('.focus-layout')).not.toHaveClass('leaf')
   })
 
@@ -317,8 +414,7 @@ describe('CompassView', () => {
     render(<CompassView {...view} />)
     fireEvent.click(screen.getByRole('button', { name: 'Edit goal' }))
     expect(view.onOpenEditor).toHaveBeenCalledWith('english-c1')
-    fireEvent.click(screen.getByRole('button', { name: 'Add within' }))
-    expect(view.onOpenEditor).toHaveBeenCalledWith()
+    expect(screen.queryByRole('button', { name: /Add within|Edit labels/ })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Merge' }))
     expect(view.onOpenMerge).toHaveBeenCalledWith('english-c1')
     fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
