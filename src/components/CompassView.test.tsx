@@ -24,7 +24,7 @@ function mapWithHiddenAndArchived(): GoalMap {
 }
 
 describe('CompassView', () => {
-  it('keeps Soul, three directions, and the complete Frontier scannable in overview', () => {
+  it('keeps Soul, the Frontier, and three directions scannable in overview', () => {
     const view = props()
     render(<CompassView {...view} />)
     expect(screen.getByRole('heading', { name: 'Soul' })).toBeVisible()
@@ -35,15 +35,70 @@ describe('CompassView', () => {
     expect(screen.queryByText(/0[1-3] \/ 03/)).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Active Frontier' })).toBeVisible()
     expect(screen.getAllByRole('heading', { name: 'Active Frontier' })).toHaveLength(1)
-    expect(screen.getByRole('heading', { name: 'Three directions' }).compareDocumentPosition(
-      screen.getByRole('heading', { name: 'Active Frontier' }),
+    expect(screen.getByRole('heading', { name: 'Active Frontier' }).compareDocumentPosition(
+      screen.getByRole('heading', { name: 'Three directions' }),
     ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const frontier = within(document.querySelector('.frontier-section') as HTMLElement)
-    expect(frontier.getByRole('button', { name: /Professional autonomy.*primary/i })).toBeVisible()
+    expect(frontier.getByRole('button', { name: /primary.*Professional autonomy/i })).toBeVisible()
     expect(frontier.getByRole('button', { name: /Launch Blog.*active/i })).toBeVisible()
     expect(frontier.getByRole('button', { name: /English C1.*maintain/i })).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: 'Create & Be Free' }))
     expect(view.onSelect).toHaveBeenCalledWith('create')
+  })
+
+  it('states what Soul means and gives each direction its own description', () => {
+    const rendered = render(<CompassView {...props()} />)
+    expect(screen.getByText('Unity with God. Life in the Holy Spirit, truth and conscience.')).toBeVisible()
+    expect(screen.getByText('Create useful things, sustain yourself, and preserve freedom of choice.')).toBeVisible()
+    const map = createSeedMap()
+    delete map.nodes.soul.description
+    rendered.rerender(<CompassView {...props(map)} />)
+    expect(screen.getByText('The orientation above every goal.')).toBeVisible()
+  })
+
+  it('leads with the Primary goal and shows one orientation line per Frontier goal', () => {
+    render(<CompassView {...props()} />)
+    const frontier = document.querySelector('.frontier-section') as HTMLElement
+    const lead = within(frontier).getByRole('button', { name: /primary.*Professional autonomy/i })
+    expect(lead).toHaveClass('frontier-lead')
+    expect(lead).toHaveTextContent('Create & Be Free')
+    expect(lead).toHaveTextContent('Target: A stable professional and economic position for the next several years.')
+    expect(within(frontier).getByRole('button', { name: /Launch Blog/ })).toHaveTextContent('Next: Publish the first working version')
+    expect(within(frontier).getByRole('button', { name: /English C1/ })).toHaveTextContent('B2-ish → C1')
+    expect(frontier.querySelectorAll('.frontier-lead')).toHaveLength(1)
+  })
+
+  it('falls back through milestone, target, current, and description for the orientation line', () => {
+    const map = structuredClone(createSeedMap())
+    map.frontier = [
+      { nodeId: 'theology-scripture', status: 'primary' },
+      { nodeId: 'clear-speech-writing', status: 'active' },
+      { nodeId: 'attention-focus', status: 'active' },
+      { nodeId: 'habits-self-control', status: 'maintain' },
+    ]
+    map.nodes['theology-scripture'].description = 'Read the Gospel with the Fathers.'
+    map.nodes['clear-speech-writing'].current = 'Rambling drafts'
+    map.nodes['attention-focus'].milestones = [{ id: 'm1', title: 'Done already', done: true }]
+    render(<CompassView {...props(map)} />)
+    const frontier = within(document.querySelector('.frontier-section') as HTMLElement)
+    expect(frontier.getByRole('button', { name: /Theology/ })).toHaveTextContent('Read the Gospel with the Fathers.')
+    expect(frontier.getByRole('button', { name: /Clear speech/ })).toHaveTextContent('Now: Rambling drafts')
+    expect(frontier.getByRole('button', { name: /Attention/ }).querySelector('.frontier-detail')).toBeNull()
+    expect(frontier.getByRole('button', { name: /Habits/ }).querySelector('.frontier-detail')).toBeNull()
+  })
+
+  it('lists the Frontier without a lead card when nothing is Primary, and hides an empty Frontier from visitors', () => {
+    const map = structuredClone(createSeedMap())
+    map.frontier = [{ nodeId: 'launch-blog', status: 'active' }]
+    const rendered = render(<CompassView {...props(map)} />)
+    expect(document.querySelector('.frontier-lead')).toBeNull()
+    expect(within(document.querySelector('.frontier-section') as HTMLElement).getByRole('button', { name: /Launch Blog/ })).toBeVisible()
+    map.frontier = []
+    rendered.rerender(<CompassView {...props(map)} />)
+    expect(screen.getByText(/No current focus/)).toBeVisible()
+    rendered.rerender(<CompassView {...props(map)} canEdit={false} />)
+    expect(screen.queryByRole('heading', { name: 'Active Frontier' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/No current focus/)).not.toBeInTheDocument()
   })
 
   it('previews every direct nonarchived goal by status, then manual order', () => {
@@ -125,6 +180,24 @@ describe('CompassView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit routine' }))
     expect(view.onOpenRoutineEditor).toHaveBeenCalledWith('understand')
     expect(screen.queryByRole('button', { name: 'Edit goal' })).not.toBeInTheDocument()
+  })
+
+  it('keeps a goal page without sub-goals quiet for readers and inviting for the owner', () => {
+    const view = { ...props(), selectedId: 'launch-blog' }
+    const rendered = render(<CompassView {...view} />)
+    expect(screen.queryByText(/Nothing here yet/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Goals in view' })).not.toBeInTheDocument()
+    expect(document.querySelector('.focus-layout')).toHaveClass('leaf')
+    rendered.rerender(<CompassView {...view} editMode />)
+    expect(screen.getByText(/Nothing here yet/)).toBeVisible()
+    expect(document.querySelector('.focus-layout')).not.toHaveClass('leaf')
+  })
+
+  it('prints no placeholder under goals that have no description or current state', () => {
+    render(<CompassView {...props()} selectedId="create" />)
+    expect(screen.queryByText('Open goal')).not.toBeInTheDocument()
+    expect(document.querySelectorAll('.goal-list .goal-row')).toHaveLength(5)
+    expect(document.querySelectorAll('.goal-row-detail')).toHaveLength(0)
   })
 
   it('exposes goal editing, merging, archiving, relations, and return navigation', () => {

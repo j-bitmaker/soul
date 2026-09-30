@@ -73,6 +73,16 @@ function nearestCluster(map: GoalMap, id: string): GoalNode | undefined {
   return pathTo(map, id).find((node) => CLUSTER_IDS.includes(node.id as typeof CLUSTER_IDS[number]))
 }
 
+/** One quiet line of orientation for a goal: where it stands or what comes next. Text only, never a meter. */
+function orientationLine(node: GoalNode): string | undefined {
+  if (node.current && node.target) return `${node.current} → ${node.target}`
+  const next = node.milestones?.find((item) => !item.done)
+  if (next) return `Next: ${next.title}`
+  if (node.target) return `Target: ${node.target}`
+  if (node.current) return `Now: ${node.current}`
+  return node.description
+}
+
 function Header(props: CompassViewProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const importRef = useRef<HTMLInputElement>(null)
@@ -128,6 +138,7 @@ function ClusterCard({ node, map, onSelect }: { node: GoalNode; map: GoalMap; on
     <h3 className="cluster-title"><button className="cluster-open" onClick={() => onSelect(node.id)}>
       <span>{node.title}</span><ArrowRight className="cluster-arrow" aria-hidden="true" />
     </button></h3>
+    {node.description && <p className="cluster-description">{node.description}</p>}
     {goals.length ? <ul className="cluster-goals" aria-label={`Goals in ${node.title}`}>{goals.map((goal) =>
       <li key={goal.id}><button className="cluster-goal" onClick={() => onSelect(goal.id)}>
         <span>{goal.title}</span>{statusFor(map, goal.id) && <span className="frontier-status" data-status={statusFor(map, goal.id)}>{statusFor(map, goal.id)}</span>}
@@ -136,43 +147,76 @@ function ClusterCard({ node, map, onSelect }: { node: GoalNode; map: GoalMap; on
   </article>
 }
 
+function FrontierLead({ props, node, cluster }: { props: CompassViewProps; node: GoalNode; cluster?: GoalNode }) {
+  const detail = orientationLine(node)
+  return <button className="frontier-lead" data-tone={toneById[cluster?.id ?? '']} onClick={() => props.onSelect(node.id)}>
+    <span className="frontier-lead-top"><span className="frontier-lead-label">primary</span><ArrowRight className="frontier-lead-arrow" aria-hidden="true" /></span>
+    <span className="frontier-lead-title">{node.title}</span>
+    <span className="frontier-context"><span className="alive-dot" aria-hidden="true" />{cluster?.title ?? 'Soul'}</span>
+    {detail && <span className="frontier-lead-detail">{detail}</span>}
+  </button>
+}
+
 function Frontier({ props }: { props: CompassViewProps }) {
+  const entries = priorityFrontier(props.map).flatMap((entry) => {
+    const node = props.map.nodes[entry.nodeId]
+    return node && !node.archived ? [{ entry, node, cluster: nearestCluster(props.map, node.id) }] : []
+  })
+  if (!entries.length && !props.canEdit) return null
+  const lead = entries.find(({ entry }) => entry.status === 'primary')
+  const rest = entries.filter((item) => item !== lead)
   return <section className="frontier-section" aria-labelledby="frontier-title">
     <div className="section-heading"><h2 id="frontier-title">Active Frontier</h2><p>What deserves attention now</p></div>
-    <div className="frontier-list">
-      {priorityFrontier(props.map).map((entry, index) => {
-        const node = props.map.nodes[entry.nodeId]
-        if (!node || node.archived) return null
-        return <div className="frontier-row" key={entry.nodeId}>
-          <button className="frontier-open" onClick={() => props.onSelect(node.id)}>
-            <span className="frontier-index">0{index + 1}</span>
-            <span className="frontier-main"><span className="frontier-title">{node.title}</span><span className="frontier-context">{nearestCluster(props.map, node.id)?.title ?? 'Soul'}</span></span>
-            <span className="frontier-status" data-status={entry.status}>{entry.status}</span>
-            <ChevronRight className="frontier-chevron" aria-hidden="true" />
-          </button>
-        </div>
-      })}
-      {!props.map.frontier.length && <p className="empty-note">No current focus. Add a goal when one needs your attention.</p>}
+    {!entries.length && <p className="empty-note">No current focus. Add a goal when one needs your attention.</p>}
+    <div className={`frontier-layout${lead && rest.length ? ' has-lead' : ''}`}>
+      {lead && <FrontierLead props={props} node={lead.node} cluster={lead.cluster} />}
+      {rest.length > 0 && <div className="frontier-list">
+        {rest.map(({ entry, node, cluster }) => {
+          const detail = orientationLine(node)
+          return <div className="frontier-row" key={entry.nodeId}>
+            <button className="frontier-open" data-tone={toneById[cluster?.id ?? '']} onClick={() => props.onSelect(node.id)}>
+              <span className="frontier-main">
+                <span className="frontier-title">{node.title}</span>
+                <span className="frontier-context"><span className="alive-dot" aria-hidden="true" />{cluster?.title ?? 'Soul'}</span>
+                {detail && <span className="frontier-detail">{detail}</span>}
+              </span>
+              <span className="frontier-status" data-status={entry.status}>{entry.status}</span>
+              <ChevronRight className="frontier-chevron" aria-hidden="true" />
+            </button>
+          </div>
+        })}
+      </div>}
     </div>
   </section>
 }
 
+/** Three rays from one point in the direction colours: the compass, drawn quietly. */
+function CompassMark() {
+  return <svg className="compass-mark" viewBox="0 0 72 28" aria-hidden="true" focusable="false">
+    <path className="ray ray-understand" d="M36 4 L9 24" />
+    <path className="ray ray-create" d="M36 4 V24" />
+    <path className="ray ray-mastery" d="M36 4 L63 24" />
+    <circle className="origin" cx="36" cy="3" r="3" />
+  </svg>
+}
+
 function Overview({ props }: { props: CompassViewProps }) {
+  const soul = props.map.nodes[ROOT_ID]
   return <main className="page" id="main-content">
     <section className="orientation" aria-labelledby="soul-title">
       <div className="eyebrow">A mental compass</div>
       <h1 className="soul-title" id="soul-title">Soul</h1>
-      <p className="soul-subtitle">The orientation above every goal.</p>
-      <div className="axis" aria-hidden="true" />
+      <p className="soul-subtitle">{soul?.description || 'The orientation above every goal.'}</p>
+      <CompassMark />
     </section>
-    <section aria-labelledby="directions-title">
+    <Frontier props={props} />
+    <section className="directions-section" aria-labelledby="directions-title">
       <div className="section-heading"><h2 id="directions-title">Three directions</h2><p>Distinct, alive, and connected</p></div>
       <div className="cluster-grid">{CLUSTER_IDS.map((id) => {
         const node = props.map.nodes[id]
         return node && <ClusterCard key={id} node={node} map={props.map} onSelect={props.onSelect} />
       })}</div>
     </section>
-    <Frontier props={props} />
     {props.editMode && <div className="edit-toolbar"><p>Add a goal under any direction.</p><button className="subtle-button" onClick={() => props.onOpenEditor()}><Plus aria-hidden="true" /> New goal</button></div>}
     <p className="footer-note">See clearly. Choose one thing. Begin.</p>
   </main>
@@ -220,11 +264,12 @@ function ChildList({ props, node }: { props: CompassViewProps; node: GoalNode })
   const totalArchivedPages = Math.max(1, Math.ceil(archived.length / 5))
   const currentArchivedPage = Math.min(archivedPage, totalArchivedPages - 1)
   const shown = allMode ? children.slice(currentPage * 5, currentPage * 5 + 5) : node.visibleChildIds.map((id) => props.map.nodes[id]).filter((child): child is GoalNode => Boolean(child && !child.archived)).slice(0, 5)
+  if (!children.length && !props.editMode) return null
   return <section className="content-section" aria-labelledby="goals-title">
     <h2 id="goals-title">{node.id === ROOT_ID ? 'Directions' : 'Goals in view'}</h2>
     <div className={`goal-list${props.editMode ? ' editing' : ''}`}>{shown.map((child, index) => <div className="frontier-row" key={child.id}>
       <button className="goal-row" onClick={() => props.onSelect(child.id)}>
-        <span className="goal-row-main"><span className="goal-row-title">{child.title}</span><span className="goal-row-detail">{child.description || child.current || 'Open goal'}</span></span>
+        <span className="goal-row-main"><span className="goal-row-title">{child.title}</span>{(child.description || child.current) && <span className="goal-row-detail">{child.description || child.current}</span>}</span>
         {statusFor(props.map, child.id) && <span className="frontier-status" data-status={statusFor(props.map, child.id)}>{statusFor(props.map, child.id)}</span>}
         <ArrowRight aria-hidden="true" />
       </button>
@@ -262,6 +307,7 @@ function Focus({ props, node }: { props: CompassViewProps; node: GoalNode }) {
   const secondary = node.secondaryIds.map((id) => props.map.nodes[id]).filter((item): item is GoalNode => Boolean(item && !item.archived))
   const currentStatus = statusFor(props.map, node.id)
   const isProtected = node.id === ROOT_ID || CLUSTER_IDS.includes(node.id as typeof CLUSTER_IDS[number])
+  const isLeaf = activeChildren(props.map, node.id).length === 0
   return <main className="page" id="main-content">
     <Breadcrumb map={props.map} node={node} onSelect={props.onSelect} />
     <div className="focus-header">
@@ -280,7 +326,7 @@ function Focus({ props, node }: { props: CompassViewProps; node: GoalNode }) {
         {!isProtected && <button className="subtle-button danger" onClick={() => props.onArchive(node.id)}>Archive</button>}
       </div>}
     </div>
-    <div className="focus-layout"><ChildList key={node.id} props={props} node={node} /><Annotations node={node} /></div>
+    <div className={`focus-layout${isLeaf && !props.editMode ? ' leaf' : ''}`}><ChildList key={node.id} props={props} node={node} /><Annotations node={node} /></div>
   </main>
 }
 
