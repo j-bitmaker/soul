@@ -209,7 +209,6 @@ function Overview({ props }: { props: CompassViewProps }) {
       <p className="soul-subtitle">{soul?.description || 'The orientation above every goal.'}</p>
       <CompassMark />
     </section>
-    <Frontier props={props} />
     <section className="directions-section" aria-labelledby="directions-title">
       <div className="section-heading"><h2 id="directions-title">Three directions</h2><p>Distinct, alive, and connected</p></div>
       <div className="cluster-grid">{CLUSTER_IDS.map((id) => {
@@ -217,6 +216,7 @@ function Overview({ props }: { props: CompassViewProps }) {
         return node && <ClusterCard key={id} node={node} map={props.map} onSelect={props.onSelect} />
       })}</div>
     </section>
+    <Frontier props={props} />
     {props.editMode && <div className="edit-toolbar"><p>Add a goal under any direction.</p><button className="subtle-button" onClick={() => props.onOpenEditor()}><Plus aria-hidden="true" /> New goal</button></div>}
     <p className="footer-note">See clearly. Choose one thing. Begin.</p>
   </main>

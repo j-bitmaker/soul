@@ -24,7 +24,7 @@ function mapWithHiddenAndArchived(): GoalMap {
 }
 
 describe('CompassView', () => {
-  it('keeps Soul, the Frontier, and three directions scannable in overview', () => {
+  it('keeps Soul, three directions, and the complete Frontier scannable in overview', () => {
     const view = props()
     render(<CompassView {...view} />)
     expect(screen.getByRole('heading', { name: 'Soul' })).toBeVisible()
@@ -35,8 +35,8 @@ describe('CompassView', () => {
     expect(screen.queryByText(/0[1-3] \/ 03/)).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Active Frontier' })).toBeVisible()
     expect(screen.getAllByRole('heading', { name: 'Active Frontier' })).toHaveLength(1)
-    expect(screen.getByRole('heading', { name: 'Active Frontier' }).compareDocumentPosition(
-      screen.getByRole('heading', { name: 'Three directions' }),
+    expect(screen.getByRole('heading', { name: 'Three directions' }).compareDocumentPosition(
+      screen.getByRole('heading', { name: 'Active Frontier' }),
     ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const frontier = within(document.querySelector('.frontier-section') as HTMLElement)
     expect(frontier.getByRole('button', { name: /primary.*Professional autonomy/i })).toBeVisible()

@@ -1,6 +1,6 @@
 # Soul · Mental Compass
 
-A small personal Goal Map. The overview states what Soul means, leads with the Primary goal of the Active Frontier (up to five goals in total, each with one quiet line of orientation), and then shows the three directions. Goals can remain title-only or carry milestones, routines, reminders, notes, and secondary links.
+A small personal Goal Map. The overview states what Soul means, shows the three directions with their goals, and ends with the Active Frontier (up to five goals in total: the Primary goal as a lead card, each with one quiet line of orientation). Goals can remain title-only or carry milestones, routines, reminders, notes, and secondary links.
 
 ## Run locally
 
