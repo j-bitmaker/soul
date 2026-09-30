@@ -1,6 +1,6 @@
 # Soul · Mental Compass
 
-A small personal Goal Map. The overview states what Soul means, shows the three directions with their goals, and ends with the Active Frontier (up to five goals in total: the Primary goal as a lead card, each with one quiet line of orientation). Goals can remain title-only or carry milestones, routines, reminders, notes, and secondary links.
+A small personal Goal Map. The overview states what Soul means, shows the three directions with their goals, and ends with the Active Frontier (up to five goals in order, the first as a lead card, each with one quiet line of orientation) and a Queue of goals waiting their turn. Goals can remain title-only or carry milestones, free-form labels (small pills), reminders, notes, and secondary links. In edit mode a goal can be archived (kept, hidden) or deleted for good after a confirmation that counts what goes with it.
 
 ## Run locally
 
@@ -29,7 +29,7 @@ The PWA uses `/soul/` as its base path. If the repository name changes, update `
 
 ## Data and checks
 
-The map is one human-readable JSON document in Firestore. Each save uses a revision-checked transaction, so a stale device cannot silently replace a newer map. The Export JSON action downloads a backup; owner-only Import JSON validates it before replacement.
+The map is one human-readable JSON document in Firestore. Each save uses a revision-checked transaction, so a stale device cannot silently replace a newer map. The Export JSON action downloads a backup; owner-only Import JSON validates it before replacement. Maps saved by earlier versions (routines, Primary/Active/Maintain statuses) load as labels and an ordered Frontier without changing anything until the owner saves; export a backup before the first save.
 
 ```sh
 npm test

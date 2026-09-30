@@ -40,7 +40,7 @@ export function createSeedMap(): GoalMap {
     },
     understand: { ...node('understand', 'Understand & Express', 'soul', understand.map(([id]) => id)),
       description: 'Understand truth, form your own understanding, and express it clearly.',
-      routines: [{ id: 'read-bible', title: 'Read Bible', cadence: 'Daily' }] },
+      labels: [{ id: 'read-bible', text: 'Read Bible · Daily' }] },
     create: { ...node('create', 'Create & Be Free', 'soul', create.map(([id]) => id)),
       description: 'Create useful things, sustain yourself, and preserve freedom of choice.' },
     mastery: { ...node('mastery', 'Self-Mastery', 'soul', mastery.map(([id]) => id)),
@@ -76,9 +76,11 @@ export function createSeedMap(): GoalMap {
     revision: 0,
     nodes,
     frontier: [
-      { nodeId: 'professional-autonomy', status: 'primary' },
+      { nodeId: 'professional-autonomy', status: 'active' },
       { nodeId: 'launch-blog', status: 'active' },
-      { nodeId: 'english-c1', status: 'maintain' },
+      { nodeId: 'english-c1', status: 'active' },
+      { nodeId: 'theology-scripture', status: 'queued' },
+      { nodeId: 'software-ai', status: 'queued' },
     ],
   }
 }

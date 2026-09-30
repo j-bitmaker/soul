@@ -38,6 +38,19 @@ vi.mock('firebase/firestore', () => ({
 
 const initialMap: GoalMap = createSeedMap()
 
+function legacyRemote(): Record<string, unknown> {
+  const { labels, ...understand } = initialMap.nodes.understand
+  void labels
+  return { ...initialMap,
+    nodes: { ...initialMap.nodes, understand: { ...understand, routines: [{ id: 'read-bible', title: 'Read Bible', cadence: 'Daily' }] } },
+    frontier: [
+      { nodeId: 'english-c1', status: 'maintain' },
+      { nodeId: 'launch-blog', status: 'active' },
+      { nodeId: 'professional-autonomy', status: 'primary' },
+    ],
+  }
+}
+
 beforeEach(() => {
   vi.resetModules()
   vi.stubEnv('VITE_FIREBASE_API_KEY', 'api-key')
@@ -145,17 +158,39 @@ describe('Firebase map adapter', () => {
     expect(saved.revision).toBe(4)
   })
 
-  it('omits empty optional Routine fields before writing to Firestore', async () => {
+  it('omits undefined optional fields before writing to Firestore', async () => {
     const { saveMap } = await import('./firebase')
     const map = { ...initialMap, nodes: { ...initialMap.nodes,
-      understand: { ...initialMap.nodes.understand, routines: [
-        { id: 'read-bible', title: 'Read Bible', cadence: undefined },
-      ] },
+      understand: { ...initialMap.nodes.understand, description: undefined, labels: [{ id: 'read-bible', text: 'Read Bible' }] },
     } }
     await saveMap(map)
     const written = sdk.set.mock.calls[0][1] as GoalMap
-    expect(written.nodes.understand.routines).toEqual([{ id: 'read-bible', title: 'Read Bible' }])
+    expect(written.nodes.understand.labels).toEqual([{ id: 'read-bible', text: 'Read Bible' }])
+    expect('description' in written.nodes.understand).toBe(false)
     expect(written).toStrictEqual(JSON.parse(JSON.stringify(written)))
+  })
+
+  it('reads a legacy map (routines and statuses) as labels and an order without writing anything', async () => {
+    const { subscribeToMap } = await import('./firebase')
+    const onMap = vi.fn()
+    subscribeToMap(onMap, vi.fn())
+    sdk.state.snapshotNext?.({ exists: () => true, data: () => legacyRemote(), metadata: { fromCache: false } })
+    const read = onMap.mock.calls[0][0] as GoalMap
+    expect(read.nodes.understand.labels).toEqual([{ id: 'read-bible', text: 'Read Bible · Daily' }])
+    expect(read.frontier.map((entry) => `${entry.nodeId}:${entry.status}`)).toEqual([
+      'professional-autonomy:active', 'launch-blog:active', 'english-c1:active',
+    ])
+    expect(sdk.set).not.toHaveBeenCalled()
+    expect(sdk.runTransaction).not.toHaveBeenCalled()
+  })
+
+  it('saves over a legacy remote at the same revision in the new shape', async () => {
+    const { saveMap } = await import('./firebase')
+    sdk.state.remoteExists = true
+    sdk.state.remoteData = { ...legacyRemote(), revision: 3 }
+    const saved = await saveMap({ ...initialMap, revision: 3 })
+    expect(saved.revision).toBe(4)
+    expect(JSON.stringify(sdk.set.mock.calls[0][1])).not.toContain('routines')
   })
 
   it('rejects an outdated map instead of overwriting it', async () => {

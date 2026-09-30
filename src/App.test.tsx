@@ -132,21 +132,21 @@ describe('Soul compass', () => {
     expect(await screen.findByRole('heading', { name: 'Write publicly' })).toBeVisible()
   })
 
-  it('edits a direction Routine without changing its protected identity', async () => {
+  it('edits a direction\'s labels without changing its protected identity', async () => {
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: 'Understand & Express' }))
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Edit routine' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Add routine' }))
-    fireEvent.change(screen.getByLabelText('Routine title 2'), { target: { value: '  Pray for others  ' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save routine' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit labels' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add label' }))
+    fireEvent.change(screen.getByLabelText('Label 2'), { target: { value: '  Pray for others  ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save labels' }))
     await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
     const saved = mocks.saveMap.mock.calls[0][0]
     expect(saved.nodes.understand.title).toBe('Understand & Express')
     expect(saved.nodes.understand.parentId).toBe('soul')
-    expect(saved.nodes.understand.routines).toEqual([
-      { id: 'read-bible', title: 'Read Bible', cadence: 'Daily' },
-      expect.objectContaining({ title: 'Pray for others', cadence: undefined }),
+    expect(saved.nodes.understand.labels).toEqual([
+      { id: 'read-bible', text: 'Read Bible · Daily' },
+      expect.objectContaining({ text: 'Pray for others' }),
     ])
   })
 
@@ -194,14 +194,78 @@ describe('Soul compass', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent('Wrong credentials')
   })
 
-  it('updates Frontier status through a revision-checked save', async () => {
+  it('moves a goal to the Queue through a revision-checked save', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Soul' })
     clickOverviewGoal(/Launch Blog/)
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    fireEvent.change(screen.getByLabelText('Frontier status'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Priority'), { target: { value: 'queue' } })
     await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
-    expect(mocks.saveMap.mock.calls[0][0].frontier.some((entry: { nodeId: string }) => entry.nodeId === 'launch-blog')).toBe(false)
+    expect(mocks.saveMap.mock.calls[0][0].frontier).toEqual([
+      { nodeId: 'professional-autonomy', status: 'active' },
+      { nodeId: 'english-c1', status: 'active' },
+      { nodeId: 'theology-scripture', status: 'queued' },
+      { nodeId: 'software-ai', status: 'queued' },
+      { nodeId: 'launch-blog', status: 'queued' },
+    ])
+  })
+
+  it('deletes a goal only after confirmation and returns to its direction', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Soul' })
+    clickOverviewGoal(/Launch Blog/)
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(mocks.saveMap).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Launch Blog', level: 1 })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
+    const saved = mocks.saveMap.mock.calls[0][0]
+    expect(saved.nodes['launch-blog']).toBeUndefined()
+    expect(saved.nodes.understand.childrenIds).not.toContain('launch-blog')
+    expect(saved.frontier.some((entry: { nodeId: string }) => entry.nodeId === 'launch-blog')).toBe(false)
+    expect(await screen.findByRole('heading', { name: 'Understand & Express', level: 1 })).toBeVisible()
+    expect(window.location.hash).toBe('#/goal/understand')
+  })
+
+  it('deletes a queued goal from the overview and stays there', async () => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Theology / Scripture' }))
+    expect(screen.getByRole('dialog', { name: 'Delete goal' })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
+    expect(mocks.saveMap.mock.calls[0][0].nodes['theology-scripture']).toBeUndefined()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete goal' })).not.toBeInTheDocument())
+    expect(screen.getByRole('heading', { name: 'Active Frontier' })).toBeVisible()
+    expect(window.location.hash).toBe('')
+  })
+
+  it('keeps the delete dialog open and reports a failed delete', async () => {
+    mocks.saveMap.mockRejectedValueOnce(new Error('Network unavailable'))
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Software / AI Engineering' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Network unavailable')
+    expect(screen.getByRole('dialog', { name: 'Delete goal' })).toBeVisible()
+  })
+
+  it('adds a new goal to the Queue under a chosen direction in one save', async () => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    fireEvent.change(screen.getByLabelText('Add to the queue'), { target: { value: 'Read more' } })
+    fireEvent.change(screen.getByLabelText('Direction'), { target: { value: 'create' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
+    const saved = mocks.saveMap.mock.calls[0][0]
+    const added = saved.frontier.at(-1)
+    expect(added.status).toBe('queued')
+    expect(saved.nodes[added.nodeId]).toMatchObject({ title: 'Read more', parentId: 'create' })
+    expect(saved.nodes.create.childrenIds).toContain(added.nodeId)
+    await waitFor(() => expect(screen.getByLabelText('Add to the queue')).toHaveValue(''))
   })
 
   it('rejects a stale editor draft after a remote map revision arrives', async () => {

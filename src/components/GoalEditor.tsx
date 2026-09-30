@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Plus, Trash2, X } from 'lucide-react'
-import type { GoalMap, GoalNode, Milestone, Routine } from '../domain/types'
+import type { GoalMap, GoalNode, Label, Milestone } from '../domain/types'
 import { ROOT_ID } from '../domain/types'
-import { cleanRoutines, RoutineFields } from './RoutineFields'
+import { cleanLabels, LabelFields } from './LabelFields'
 
 export interface GoalEditorValues {
   title: string
@@ -12,7 +12,7 @@ export interface GoalEditorValues {
   current: string
   target: string
   milestones: Milestone[]
-  routines: Routine[]
+  labels: Label[]
   reminders: string[]
   note: string
 }
@@ -33,7 +33,7 @@ function initialValues(node: GoalNode | undefined, parentId: string): GoalEditor
     title: node?.title ?? '', parentId: node?.parentId ?? (parentId === ROOT_ID ? 'understand' : parentId),
     secondaryIds: node?.secondaryIds ?? [], description: node?.description ?? '',
     current: node?.current ?? '', target: node?.target ?? '',
-    milestones: node?.milestones ?? [], routines: node?.routines ?? [], reminders: node?.reminders ?? [], note: node?.note ?? '',
+    milestones: node?.milestones ?? [], labels: node?.labels ?? [], reminders: node?.reminders ?? [], note: node?.note ?? '',
   }
 }
 
@@ -101,7 +101,7 @@ function GoalEditorInner({ map, node, parentId, busy, error, onClose, onSave }: 
     const title = values.title.trim()
     if (!title) { setLocalError('Give this goal a name.'); return }
     setLocalError('')
-    onSave({ ...values, title, description: values.description.trim(), current: values.current.trim(), target: values.target.trim(), note: values.note.trim(), milestones: values.milestones.filter((item) => item.title.trim()).map((item) => ({ ...item, title: item.title.trim() })), routines: cleanRoutines(values.routines), reminders: remindersText.split('\n').map((item) => item.trim()).filter(Boolean) })
+    onSave({ ...values, title, description: values.description.trim(), current: values.current.trim(), target: values.target.trim(), note: values.note.trim(), milestones: values.milestones.filter((item) => item.title.trim()).map((item) => ({ ...item, title: item.title.trim() })), labels: cleanLabels(values.labels), reminders: remindersText.split('\n').map((item) => item.trim()).filter(Boolean) })
   }
   return <dialog className="sheet" ref={dialogRef} onCancel={(event) => { event.preventDefault(); onClose() }} aria-labelledby="editor-title">
     <div className="sheet-head"><div><div className="eyebrow">Shape the map</div><h2 id="editor-title">{node ? 'Edit goal' : 'New goal'}</h2></div><button type="button" className="icon-button" aria-label="Close editor" onClick={onClose}><X aria-hidden="true" /></button></div>
@@ -114,7 +114,7 @@ function GoalEditorInner({ map, node, parentId, busy, error, onClose, onSave }: 
         <div className="field"><label htmlFor="goal-current">Current</label><textarea id="goal-current" value={values.current} onChange={(event) => setValues({ ...values, current: event.target.value })} placeholder="Where things stand" /></div>
         <div className="field"><label htmlFor="goal-target">Target</label><textarea id="goal-target" value={values.target} onChange={(event) => setValues({ ...values, target: event.target.value })} placeholder="The desired state" /></div>
         <MilestoneFields items={values.milestones} onChange={(milestones) => setValues({ ...values, milestones })} />
-        <RoutineFields items={values.routines} onChange={(routines) => setValues({ ...values, routines })} />
+        <LabelFields items={values.labels} onChange={(labels) => setValues({ ...values, labels })} />
         <div className="field full"><label htmlFor="goal-reminders">Reminders</label><textarea id="goal-reminders" value={remindersText} onChange={(event) => setRemindersText(event.target.value)} placeholder="One useful next action per line" /><p className="field-hint">One per line. These are notes, not permanent branches.</p></div>
         <div className="field full"><label htmlFor="goal-note">Note</label><textarea id="goal-note" value={values.note} onChange={(event) => setValues({ ...values, note: event.target.value })} placeholder="A thought worth keeping" /><p className="field-hint">This map is publicly readable, including this note.</p></div>
       </div>

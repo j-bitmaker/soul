@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { createSeedMap } from '../domain/seed'
 import type { GoalMap } from '../domain/types'
@@ -8,9 +8,9 @@ function props(map: GoalMap = createSeedMap()): CompassViewProps {
   return {
     map, selectedId: null, editMode: false, canEdit: true,
     onSelect: vi.fn(), onToggleEdit: vi.fn(), onOpenEditor: vi.fn(),
-    onSetFrontier: vi.fn(), onReorder: vi.fn(), onToggleVisible: vi.fn(),
-    onArchive: vi.fn(), onRestore: vi.fn(), onOpenMerge: vi.fn(),
-    onOpenRoutineEditor: vi.fn(), onExport: vi.fn(), onImport: vi.fn(), onSignIn: vi.fn(), onSignOut: vi.fn(),
+    onPlace: vi.fn(), onAddToQueue: vi.fn(async () => true), onReorder: vi.fn(), onToggleVisible: vi.fn(),
+    onArchive: vi.fn(), onRestore: vi.fn(), onOpenMerge: vi.fn(), onDelete: vi.fn(),
+    onOpenLabelEditor: vi.fn(), onExport: vi.fn(), onImport: vi.fn(), onSignIn: vi.fn(), onSignOut: vi.fn(),
   }
 }
 
@@ -39,9 +39,11 @@ describe('CompassView', () => {
       screen.getByRole('heading', { name: 'Active Frontier' }),
     ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const frontier = within(document.querySelector('.frontier-section') as HTMLElement)
-    expect(frontier.getByRole('button', { name: /primary.*Professional autonomy/i })).toBeVisible()
-    expect(frontier.getByRole('button', { name: /Launch Blog.*active/i })).toBeVisible()
-    expect(frontier.getByRole('button', { name: /English C1.*maintain/i })).toBeVisible()
+    expect(frontier.getByRole('button', { name: /Lead focus.*Professional autonomy/i })).toBeVisible()
+    expect(frontier.getByRole('button', { name: /Launch Blog/ })).toBeVisible()
+    expect(frontier.getByRole('button', { name: /English C1/ })).toBeVisible()
+    expect(document.querySelector('.frontier-status')).toBeNull()
+    expect(screen.queryByText(/^(primary|active|maintain)$/i)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Create & Be Free' }))
     expect(view.onSelect).toHaveBeenCalledWith('create')
   })
@@ -59,7 +61,7 @@ describe('CompassView', () => {
   it('leads with the Primary goal and shows one orientation line per Frontier goal', () => {
     render(<CompassView {...props()} />)
     const frontier = document.querySelector('.frontier-section') as HTMLElement
-    const lead = within(frontier).getByRole('button', { name: /primary.*Professional autonomy/i })
+    const lead = within(frontier).getByRole('button', { name: /Lead focus.*Professional autonomy/i })
     expect(lead).toHaveClass('frontier-lead')
     expect(lead).toHaveTextContent('Create & Be Free')
     expect(lead).toHaveTextContent('Target: A stable professional and economic position for the next several years.')
@@ -71,10 +73,10 @@ describe('CompassView', () => {
   it('falls back through milestone, target, current, and description for the orientation line', () => {
     const map = structuredClone(createSeedMap())
     map.frontier = [
-      { nodeId: 'theology-scripture', status: 'primary' },
+      { nodeId: 'theology-scripture', status: 'active' },
       { nodeId: 'clear-speech-writing', status: 'active' },
       { nodeId: 'attention-focus', status: 'active' },
-      { nodeId: 'habits-self-control', status: 'maintain' },
+      { nodeId: 'habits-self-control', status: 'active' },
     ]
     map.nodes['theology-scripture'].description = 'Read the Gospel with the Fathers.'
     map.nodes['clear-speech-writing'].current = 'Rambling drafts'
@@ -87,27 +89,98 @@ describe('CompassView', () => {
     expect(frontier.getByRole('button', { name: /Habits/ }).querySelector('.frontier-detail')).toBeNull()
   })
 
-  it('lists the Frontier without a lead card when nothing is Primary, and hides an empty Frontier from visitors', () => {
+  it('shows the Queue under Active with each goal tinted by its direction', () => {
+    render(<CompassView {...props()} />)
+    const queue = within(document.querySelector('.queue-section') as HTMLElement)
+    expect(queue.getByRole('heading', { name: 'Queue' })).toBeVisible()
+    const rows = [...document.querySelectorAll<HTMLElement>('.queue-section .frontier-open')]
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining('Theology / Scripture'),
+      expect.stringContaining('Software / AI Engineering'),
+    ])
+    expect(rows[0].dataset.tone).toBe('expression')
+    expect(rows[1].dataset.tone).toBe('freedom')
+    expect(queue.queryByRole('button', { name: /Professional autonomy/ })).not.toBeInTheDocument()
+  })
+
+  it('hides empty lanes from visitors and explains them to the owner', () => {
     const map = structuredClone(createSeedMap())
-    map.frontier = [{ nodeId: 'launch-blog', status: 'active' }]
+    map.frontier = [{ nodeId: 'launch-blog', status: 'queued' }]
     const rendered = render(<CompassView {...props(map)} />)
     expect(document.querySelector('.frontier-lead')).toBeNull()
-    expect(within(document.querySelector('.frontier-section') as HTMLElement).getByRole('button', { name: /Launch Blog/ })).toBeVisible()
+    expect(screen.getByText(/No current focus/)).toBeVisible()
+    expect(within(document.querySelector('.queue-section') as HTMLElement).getByRole('button', { name: /Launch Blog/ })).toBeVisible()
     map.frontier = []
     rendered.rerender(<CompassView {...props(map)} />)
     expect(screen.getByText(/No current focus/)).toBeVisible()
+    expect(document.querySelector('.queue-section')).toBeNull()
     rendered.rerender(<CompassView {...props(map)} canEdit={false} />)
     expect(screen.queryByRole('heading', { name: 'Active Frontier' })).not.toBeInTheDocument()
     expect(screen.queryByText(/No current focus/)).not.toBeInTheDocument()
   })
 
-  it('previews every direct nonarchived goal by status, then manual order', () => {
+  it('reorders Active and Queue goals and adds to the Queue in edit mode', async () => {
+    const view = { ...props(), editMode: true }
+    render(<CompassView {...view} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Move Launch Blog down in Active' }))
+    expect(view.onPlace).toHaveBeenCalledWith('launch-blog', 'active', 2)
+    fireEvent.click(screen.getByRole('button', { name: 'Move Launch Blog up in Active' }))
+    expect(view.onPlace).toHaveBeenCalledWith('launch-blog', 'active', 0)
+    expect(screen.getByRole('button', { name: 'Move Professional autonomy up in Active' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Move Software / AI Engineering down in the Queue' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Move Software / AI Engineering up in the Queue' }))
+    expect(view.onPlace).toHaveBeenCalledWith('software-ai', 'queue', 0)
+    fireEvent.change(screen.getByLabelText('Add to the queue'), { target: { value: '  Read more  ' } })
+    fireEvent.change(screen.getByLabelText('Direction'), { target: { value: 'create' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    expect(view.onAddToQueue).toHaveBeenCalledWith('Read more', 'create')
+    await waitFor(() => expect(screen.getByLabelText('Add to the queue')).toHaveValue(''))
+  })
+
+  it('offers an explicit Delete on goal pages, archived rows, and Active and Queue rows in edit mode only', () => {
+    const view = { ...props(mapWithHiddenAndArchived()), selectedId: 'understand', editMode: true }
+    const rendered = render(<CompassView {...view} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Former focus' }))
+    expect(view.onDelete).toHaveBeenCalledWith('old-goal')
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    rendered.rerender(<CompassView {...view} selectedId="launch-blog" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(view.onDelete).toHaveBeenCalledWith('launch-blog')
+    rendered.rerender(<CompassView {...view} selectedId={null} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Professional autonomy' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Theology / Scripture' }))
+    expect(view.onDelete).toHaveBeenCalledWith('professional-autonomy')
+    expect(view.onDelete).toHaveBeenCalledWith('theology-scripture')
+    rendered.rerender(<CompassView {...view} selectedId={null} editMode={false} />)
+    expect(screen.queryByRole('button', { name: /^Delete/ })).not.toBeInTheDocument()
+    rendered.rerender(<CompassView {...view} selectedId="create" />)
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+  })
+
+  it('hides reorder and queue controls outside edit mode', () => {
+    render(<CompassView {...props()} />)
+    expect(screen.queryByRole('button', { name: /Move .* in Active/ })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Add to the queue')).not.toBeInTheDocument()
+  })
+
+  it('hints at Active and Queued goals on direction cards without text labels', () => {
+    render(<CompassView {...props()} />)
+    const card = document.querySelector('.cluster-card[data-tone="expression"]') as HTMLElement
+    const launch = within(card).getByRole('button', { name: /Launch Blog/ })
+    expect(launch.querySelector('.lane-mark')).toHaveAttribute('data-lane', 'active')
+    expect(launch).toHaveTextContent('In focus')
+    const theology = within(card).getByRole('button', { name: /Theology/ })
+    expect(theology.querySelector('.lane-mark')).toHaveAttribute('data-lane', 'queue')
+    expect(within(card).getByRole('button', { name: /Philosophy/ }).querySelector('.lane-mark')).toBeNull()
+  })
+
+  it('previews every direct nonarchived goal by priority, then manual order', () => {
     const map = mapWithHiddenAndArchived()
     map.nodes.understand.childrenIds = ['clear-speech-writing', 'extra-goal', 'english-c1', 'launch-blog', 'theology-scripture', 'philosophy-humanities', 'old-goal']
     map.frontier = [
-      { nodeId: 'theology-scripture', status: 'primary' },
+      { nodeId: 'theology-scripture', status: 'active' },
       { nodeId: 'launch-blog', status: 'active' },
-      { nodeId: 'english-c1', status: 'maintain' },
+      { nodeId: 'english-c1', status: 'active' },
     ]
     map.nodes['nested-goal'] = { id: 'nested-goal', title: 'Nested goal', parentId: 'launch-blog', childrenIds: [], visibleChildIds: [], secondaryIds: [] }
     map.nodes['launch-blog'].childrenIds = ['nested-goal']
@@ -163,23 +236,44 @@ describe('CompassView', () => {
     expect(view.onToggleVisible).toHaveBeenCalledWith('understand', 'theology-scripture')
   })
 
-  it('can remove a goal from the Frontier in edit mode', () => {
+  it('changes a goal\'s priority from the goal page in edit mode', () => {
     const view = { ...props(), selectedId: 'english-c1', editMode: true }
     render(<CompassView {...view} />)
-    fireEvent.change(screen.getByLabelText('Frontier status'), { target: { value: '' } })
-    expect(view.onSetFrontier).toHaveBeenCalledWith('english-c1', null)
+    expect(screen.getByLabelText('Priority')).toHaveValue('active')
+    fireEvent.change(screen.getByLabelText('Priority'), { target: { value: '' } })
+    expect(view.onPlace).toHaveBeenCalledWith('english-c1', null)
+    fireEvent.change(screen.getByLabelText('Priority'), { target: { value: 'queue' } })
+    expect(view.onPlace).toHaveBeenCalledWith('english-c1', 'queue')
   })
 
-  it('shows direction Routine in overview and focus with a protected edit action', () => {
-    const view = props()
+  it('does not offer Active when it is full', () => {
+    const map = structuredClone(createSeedMap())
+    map.frontier = ['professional-autonomy', 'launch-blog', 'english-c1', 'own-products', 'attention-focus']
+      .map((nodeId) => ({ nodeId, status: 'active' as const }))
+    const rendered = render(<CompassView {...props(map)} selectedId="habits-self-control" editMode />)
+    expect(screen.getByRole('option', { name: 'Active (full)' })).toBeDisabled()
+    rendered.rerender(<CompassView {...props(map)} selectedId="own-products" editMode />)
+    expect(screen.getByRole('option', { name: 'Active' })).toBeEnabled()
+  })
+
+  it('shows labels as pills in the overview and on goal pages, with an Edit labels action', () => {
+    const map = structuredClone(createSeedMap())
+    map.nodes['english-c1'].labels = [{ id: 'speak', text: 'Speaking practice' }, { id: 'write', text: 'Weekly writing' }]
+    const view = props(map)
     const rendered = render(<CompassView {...view} />)
     const card = document.querySelector('.cluster-card[data-tone="expression"]') as HTMLElement
-    expect(within(card).getByRole('region', { name: 'Routine for Understand & Express' })).toHaveTextContent('Read Bible')
+    expect(card.querySelector('.cluster-labels')).toHaveTextContent('Read Bible · Daily')
+    expect(within(document.querySelector('.frontier-section') as HTMLElement).getByRole('button', { name: /English C1/ }))
+      .toHaveTextContent('Speaking practiceWeekly writing')
+    expect(document.body).not.toHaveTextContent('Routine')
     rendered.rerender(<CompassView {...view} selectedId="understand" editMode />)
-    expect(screen.getByRole('region', { name: 'Routine for Understand & Express' })).toHaveTextContent('Daily')
-    fireEvent.click(screen.getByRole('button', { name: 'Edit routine' }))
-    expect(view.onOpenRoutineEditor).toHaveBeenCalledWith('understand')
+    expect(document.querySelector('.focus-meta')).toHaveTextContent('Read Bible · Daily')
+    fireEvent.click(screen.getByRole('button', { name: 'Edit labels' }))
+    expect(view.onOpenLabelEditor).toHaveBeenCalledWith('understand')
     expect(screen.queryByRole('button', { name: 'Edit goal' })).not.toBeInTheDocument()
+    rendered.rerender(<CompassView {...view} selectedId="english-c1" />)
+    expect(document.querySelector('.focus-meta')).toHaveTextContent('Speaking practice')
+    expect(screen.queryByRole('button', { name: 'Edit labels' })).not.toBeInTheDocument()
   })
 
   it('keeps a goal page without sub-goals quiet for readers and inviting for the owner', () => {
