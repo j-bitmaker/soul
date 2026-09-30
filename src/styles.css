@@ -152,7 +152,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 [data-tone="freedom"] { --tone: var(--rust); }
 [data-tone="mastery"] { --tone: var(--gold); }
 
-.directions-section { margin-top: 44px; }
+.directions-section { margin-top: 32px; }
 .cluster-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
 
 .cluster-card {
@@ -190,7 +190,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .routine-section .routine-list li { border-bottom: 1px solid var(--line); font-size: 14px; }
 .alive-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--tone); flex: none; }
 
-.frontier-section { margin-top: 32px; }
+.frontier-section { margin-top: 44px; }
 .frontier-layout { display: grid; gap: 14px; }
 .frontier-lead {
   min-width: 0;
@@ -343,8 +343,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .cluster-grid { grid-template-columns: 1fr; gap: 12px; }
   .cluster-card { padding: 20px 24px; }
   .cluster-title { font-size: clamp(23px, 3.2vw, 28px); }
-  .frontier-section { margin-top: 28px; }
-  .directions-section { margin-top: 36px; }
+  .directions-section { margin-top: 28px; }
+  .frontier-section { margin-top: 36px; }
   .focus-layout { display: block; }
 }
 
