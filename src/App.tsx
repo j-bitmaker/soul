@@ -242,7 +242,7 @@ export default function App() {
       onSelect={(id) => select(id)} onToggleEdit={() => setEditMode((value) => !value)}
       onOpenEditor={openEditor}
       onOpenLabelEditor={openLabelEditor}
-      onPlace={(id, lane, index) => { void persist((current) => placeInFrontier(current, id, lane, index, 'reject')) }}
+      onPlace={(id, lane, index, whenFull = 'reject') => persist((current) => placeInFrontier(current, id, lane, index, whenFull))}
       onAddToQueue={(title, parentId) => persist((current) => queueGoal(current, { id: crypto.randomUUID(), title, parentId }))}
       onReorder={(id, direction) => { void persist((current) => reorderGoal(current, id, direction)) }}
       onArchive={(id) => { void persist((current) => archiveGoal(current, id)).then((saved) => {

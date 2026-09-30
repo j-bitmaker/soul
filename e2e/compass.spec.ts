@@ -1,10 +1,24 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
+
+async function drag(page: Page, from: Locator, to: Locator): Promise<void> {
+  const start = (await from.boundingBox())!
+  const end = (await to.boundingBox())!
+  await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(start.x + start.width / 2 + 12, start.y + start.height / 2 + 12, { steps: 4 })
+  await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2, { steps: 14 })
+  await page.mouse.up()
+}
+
+const savedFrontier = (page: Page) => page.evaluate(() =>
+  (JSON.parse(localStorage.getItem('soul-compass-preview') as string).frontier as { nodeId: string; status: string }[])
+    .map((entry) => `${entry.nodeId}:${entry.status}`))
 
 test('overview, focus, edit, export, and offline revisit', async ({ page, context }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Soul' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Active Frontier' })).toBeVisible()
-  await expect(page.locator('.frontier-section').getByRole('button', { name: /Professional autonomy/ })).toBeVisible()
+  await expect(page.locator('.frontier-lead')).toContainText('Professional autonomy')
 
   await page.locator('.cluster-open', { hasText: 'Create & Be Free' }).click()
   await page.getByRole('button', { name: /Professional autonomy/ }).click()
@@ -132,4 +146,66 @@ test('adds a goal to the queue and deletes it explicitly', async ({ page }) => {
   await page.getByRole('button', { name: 'Delete permanently' }).click()
   await expect(row).toHaveCount(0)
   await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
+test('drags goals between Active and the Queue and reorders them', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'mobile', 'Mouse dragging is checked on desktop; touch needs a real device')
+  await page.setViewportSize({ width: 1280, height: 1800 })
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: 'Drag Launch Blog' })).toBeVisible()
+
+  // Active -> Queue, in front of the goal it is dropped on
+  await drag(page, page.getByRole('button', { name: 'Drag Launch Blog' }), page.locator('.queue-section .frontier-row', { hasText: 'Theology / Scripture' }))
+  await expect(page.locator('.queue-section .frontier-open').first()).toContainText('Launch Blog')
+  expect(await savedFrontier(page)).toEqual([
+    'professional-autonomy:active', 'english-c1:active', 'launch-blog:queued', 'theology-scripture:queued', 'software-ai:queued',
+  ])
+
+  // Queue -> top of Active: it becomes the lead card
+  await drag(page, page.getByRole('button', { name: 'Drag Software / AI Engineering' }), page.locator('.frontier-lead-wrap'))
+  await expect(page.locator('.frontier-lead')).toContainText('Software / AI Engineering')
+  expect(await savedFrontier(page)).toEqual([
+    'software-ai:active', 'professional-autonomy:active', 'english-c1:active', 'launch-blog:queued', 'theology-scripture:queued',
+  ])
+
+  // Within Active: swap the lead with the goal below it
+  await drag(page, page.getByRole('button', { name: 'Drag Software / AI Engineering' }), page.locator('.frontier-list .frontier-row', { hasText: 'English C1' }))
+  expect((await savedFrontier(page))[0]).toBe('professional-autonomy:active')
+  await expect(page.locator('.frontier-lead')).toContainText('Professional autonomy')
+})
+
+test('keeps the Frontier inside the screen on phones, also in edit mode', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'mobile', 'This test sets its own viewports')
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 800 })
+    await page.goto('/')
+    await expect(page.locator('.frontier-lead')).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.getByRole('button', { name: 'Edit', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Move Launch Blog down in Active' })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  }
+})
+
+test('drags a goal with a finger: press the handle, then move', async ({ page, context }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile', 'Touch dragging is emulated on the phone project')
+  await page.setViewportSize({ width: 412, height: 2600 })
+  await page.goto('/')
+  const client = await context.newCDPSession(page)
+  const centre = async (locator: Locator) => { const box = (await locator.boundingBox())!; return { x: box.x + box.width / 2, y: box.y + box.height / 2 } }
+  const from = await centre(page.getByRole('button', { name: 'Drag Launch Blog' }))
+  const to = await centre(page.locator('.queue-section .frontier-row', { hasText: 'Theology / Scripture' }))
+  const touch = (type: string, point?: { x: number; y: number }) =>
+    client.send('Input.dispatchTouchEvent', { type, touchPoints: point ? [point] : [] } as never)
+  await touch('touchStart', from)
+  await page.waitForTimeout(260)
+  for (let step = 1; step <= 16; step += 1) {
+    await touch('touchMove', { x: from.x + (to.x - from.x) * step / 16, y: from.y + (to.y - from.y) * step / 16 })
+    await page.waitForTimeout(16)
+  }
+  await touch('touchEnd')
+  await expect(page.locator('.queue-section .frontier-open').first()).toContainText('Launch Blog')
+  expect(await savedFrontier(page)).toEqual([
+    'professional-autonomy:active', 'english-c1:active', 'launch-blog:queued', 'theology-scripture:queued', 'software-ai:queued',
+  ])
 })

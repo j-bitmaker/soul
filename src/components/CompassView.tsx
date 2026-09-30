@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowRight, ArrowUp, ChevronRight, Compass, Download, Ellipsis, Eye, EyeOff, LogIn, LogOut, Pencil, Plus, Tag, Trash2, Upload, X } from 'lucide-react'
-import type { FrontierLane, GoalMap, GoalNode, Label } from '../domain/types'
+import type { FrontierLane, GoalMap, GoalNode } from '../domain/types'
 import { CLUSTER_IDS, MAX_ACTIVE, ROOT_ID } from '../domain/types'
+import { Frontier } from './FrontierBoard'
+import { LabelPills, laneOf, nearestCluster, pathTo, toneById } from './goalView'
 
 export interface CompassViewProps {
   map: GoalMap
@@ -14,7 +16,7 @@ export interface CompassViewProps {
   onToggleEdit: () => void
   onOpenEditor: (id?: string) => void
   onOpenLabelEditor: (id: string) => void
-  onPlace: (id: string, lane: FrontierLane | null, index?: number) => void
+  onPlace: (id: string, lane: FrontierLane | null, index?: number, whenFull?: 'bump' | 'reject') => Promise<boolean> | void
   onAddToQueue: (title: string, parentId: string) => Promise<boolean>
   onReorder: (id: string, direction: -1 | 1) => void
   onToggleVisible: (parentId: string, childId: string) => void
@@ -28,10 +30,6 @@ export interface CompassViewProps {
   onSignOut: () => void
 }
 
-const toneById: Record<string, string> = {
-  understand: 'expression', create: 'freedom', mastery: 'mastery',
-}
-
 function activeChildren(map: GoalMap, id: string): GoalNode[] {
   const parent = map.nodes[id]
   return (parent?.childrenIds ?? [])
@@ -39,51 +37,11 @@ function activeChildren(map: GoalMap, id: string): GoalNode[] {
     .filter((node): node is GoalNode => Boolean(node && !node.archived))
 }
 
-function laneOf(map: GoalMap, id: string): FrontierLane | null {
-  const entry = map.frontier.find((item) => item.nodeId === id)
-  return entry ? (entry.status === 'queued' ? 'queue' : 'active') : null
-}
-
 /** Direct goals in priority order: Active, then Queue (both in their own order), then the rest in place. */
 function priorityChildren(map: GoalMap, id: string): GoalNode[] {
   const order = new Map(map.frontier.map((entry, index) => [entry.nodeId, index]))
   return activeChildren(map, id).sort((left, right) =>
     (order.get(left.id) ?? map.frontier.length) - (order.get(right.id) ?? map.frontier.length))
-}
-
-interface LaneGoal { node: GoalNode; cluster?: GoalNode }
-
-function laneGoals(map: GoalMap, lane: FrontierLane): LaneGoal[] {
-  return map.frontier.filter((entry) => (entry.status === 'queued') === (lane === 'queue')).flatMap((entry) => {
-    const node = map.nodes[entry.nodeId]
-    return node && !node.archived ? [{ node, cluster: nearestCluster(map, node.id) }] : []
-  })
-}
-
-function pathTo(map: GoalMap, id: string): GoalNode[] {
-  const path: GoalNode[] = []
-  const seen = new Set<string>()
-  let cursor: GoalNode | undefined = map.nodes[id]
-  while (cursor && !seen.has(cursor.id)) {
-    path.unshift(cursor)
-    seen.add(cursor.id)
-    cursor = cursor.parentId ? map.nodes[cursor.parentId] : undefined
-  }
-  return path
-}
-
-function nearestCluster(map: GoalMap, id: string): GoalNode | undefined {
-  return pathTo(map, id).find((node) => CLUSTER_IDS.includes(node.id as typeof CLUSTER_IDS[number]))
-}
-
-/** One quiet line of orientation for a goal: where it stands or what comes next. Text only, never a meter. */
-function orientationLine(node: GoalNode): string | undefined {
-  if (node.current && node.target) return `${node.current} → ${node.target}`
-  const next = node.milestones?.find((item) => !item.done)
-  if (next) return `Next: ${next.title}`
-  if (node.target) return `Target: ${node.target}`
-  if (node.current) return `Now: ${node.current}`
-  return node.description
 }
 
 function Header(props: CompassViewProps) {
@@ -125,12 +83,6 @@ function Header(props: CompassViewProps) {
   </header>
 }
 
-/** Free-form labels as small pills. Plain spans so they can also sit inside buttons. */
-function LabelPills({ labels, className = '' }: { labels?: Label[]; className?: string }) {
-  if (!labels?.length) return null
-  return <span className={`label-list ${className}`.trim()}>{labels.map((label) => <span className="label-pill" key={label.id}>{label.text}</span>)}</span>
-}
-
 function ClusterCard({ node, map, onSelect }: { node: GoalNode; map: GoalMap; onSelect: (id: string) => void }) {
   const goals = priorityChildren(map, node.id)
   return <article className="cluster-card" data-tone={toneById[node.id]}>
@@ -144,100 +96,6 @@ function ClusterCard({ node, map, onSelect }: { node: GoalNode; map: GoalMap; on
       </button></li>)}</ul> : <p className="cluster-empty">No goals yet</p>}
     {node.labels?.length ? <LabelPills labels={node.labels} className="cluster-labels" /> : null}
   </article>
-}
-
-function LaneMoves({ props, id, lane, index, count }: { props: CompassViewProps; id: string; lane: FrontierLane; index: number; count: number }) {
-  return <div className="edit-row" aria-label={`Order of ${props.map.nodes[id].title}`}>
-    <button className="icon-button" title="Move up" aria-label={`Move ${props.map.nodes[id].title} up in ${lane === 'active' ? 'Active' : 'the Queue'}`}
-      disabled={index === 0 || props.busy} onClick={() => props.onPlace(id, lane, index - 1)}><ArrowUp aria-hidden="true" /></button>
-    <button className="icon-button" title="Move down" aria-label={`Move ${props.map.nodes[id].title} down in ${lane === 'active' ? 'Active' : 'the Queue'}`}
-      disabled={index === count - 1 || props.busy} onClick={() => props.onPlace(id, lane, index + 1)}><ArrowDown aria-hidden="true" /></button>
-    <button className="icon-button danger" title="Delete" aria-label={`Delete ${props.map.nodes[id].title}`}
-      disabled={props.busy} onClick={() => props.onDelete(id)}><Trash2 aria-hidden="true" /></button>
-  </div>
-}
-
-function FrontierLead({ props, goal, count }: { props: CompassViewProps; goal: LaneGoal; count: number }) {
-  const { node, cluster } = goal
-  const detail = orientationLine(node)
-  return <div className="frontier-lead-wrap">
-    <button className="frontier-lead" data-tone={toneById[cluster?.id ?? '']} onClick={() => props.onSelect(node.id)}>
-      <span className="frontier-lead-top">
-        <span className="frontier-context"><span className="alive-dot" aria-hidden="true" />{cluster?.title ?? 'Soul'}</span>
-        <ArrowRight className="frontier-lead-arrow" aria-hidden="true" />
-      </span>
-      <span className="frontier-lead-title"><span className="visually-hidden">Lead focus: </span>{node.title}</span>
-      {detail && <span className="frontier-lead-detail">{detail}</span>}
-      <LabelPills labels={node.labels} />
-    </button>
-    {props.editMode && <LaneMoves props={props} id={node.id} lane="active" index={0} count={count} />}
-  </div>
-}
-
-function FrontierRow({ props, goal, lane, index, count }: { props: CompassViewProps; goal: LaneGoal; lane: FrontierLane; index: number; count: number }) {
-  const { node, cluster } = goal
-  const detail = orientationLine(node)
-  return <div className="frontier-row">
-    <button className="frontier-open" data-tone={toneById[cluster?.id ?? '']} onClick={() => props.onSelect(node.id)}>
-      <span className="frontier-main">
-        <span className="frontier-title">{node.title}</span>
-        <span className="frontier-context"><span className="alive-dot" aria-hidden="true" />{cluster?.title ?? 'Soul'}</span>
-        {detail && <span className="frontier-detail">{detail}</span>}
-        <LabelPills labels={node.labels} />
-      </span>
-      <ChevronRight className="frontier-chevron" aria-hidden="true" />
-    </button>
-    {props.editMode && <LaneMoves props={props} id={node.id} lane={lane} index={index} count={count} />}
-  </div>
-}
-
-function QueueAdd({ props }: { props: CompassViewProps }) {
-  const [title, setTitle] = useState('')
-  const [parentId, setParentId] = useState<string>(CLUSTER_IDS[0])
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const text = title.trim()
-    if (!text) return
-    if (await props.onAddToQueue(text, parentId)) setTitle('')
-  }
-  return <form className="queue-add" onSubmit={(event) => { void submit(event) }}>
-    <label className="visually-hidden" htmlFor="queue-add-title">Add to the queue</label>
-    <input id="queue-add-title" value={title} placeholder="Add to the queue…" onChange={(event) => setTitle(event.target.value)} />
-    <label className="visually-hidden" htmlFor="queue-add-direction">Direction</label>
-    <select id="queue-add-direction" value={parentId} onChange={(event) => setParentId(event.target.value)}>
-      {CLUSTER_IDS.map((id) => <option key={id} value={id}>{props.map.nodes[id]?.title ?? id}</option>)}
-    </select>
-    <button className="subtle-button" disabled={props.busy || !title.trim()}><Plus aria-hidden="true" /> Add</button>
-  </form>
-}
-
-function Queue({ props, goals }: { props: CompassViewProps; goals: LaneGoal[] }) {
-  if (!goals.length && !props.editMode) return null
-  return <div className="queue-section" role="group" aria-labelledby="queue-title">
-    <div className="queue-heading"><h3 id="queue-title">Queue</h3><p>Next in line, not active yet</p></div>
-    {goals.length > 0 && <div className="frontier-list">
-      {goals.map((goal, index) => <FrontierRow key={goal.node.id} props={props} goal={goal} lane="queue" index={index} count={goals.length} />)}
-    </div>}
-    {props.editMode && <QueueAdd props={props} />}
-  </div>
-}
-
-function Frontier({ props }: { props: CompassViewProps }) {
-  const active = laneGoals(props.map, 'active')
-  const queue = laneGoals(props.map, 'queue')
-  if (!active.length && !queue.length && !props.canEdit) return null
-  const [lead, ...rest] = active
-  return <section className="frontier-section" aria-labelledby="frontier-title">
-    <div className="section-heading"><h2 id="frontier-title">Active Frontier</h2><p>What deserves attention now</p></div>
-    {!active.length && <p className="empty-note">No current focus. Add a goal when one needs your attention.</p>}
-    <div className={`frontier-layout${lead && rest.length ? ' has-lead' : ''}`}>
-      {lead && <FrontierLead props={props} goal={lead} count={active.length} />}
-      {rest.length > 0 && <div className="frontier-list">
-        {rest.map((goal, index) => <FrontierRow key={goal.node.id} props={props} goal={goal} lane="active" index={index + 1} count={active.length} />)}
-      </div>}
-    </div>
-    <Queue props={props} goals={queue} />
-  </section>
 }
 
 /** Three rays from one point in the direction colours: the compass, drawn quietly. */
