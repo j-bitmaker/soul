@@ -28,6 +28,8 @@ test('overview, focus, edit, export, and offline revisit', async ({ page, contex
   await page.evaluate(() => navigator.serviceWorker.ready)
   await context.setOffline(true)
   await page.reload()
+  await expect(page.getByRole('heading', { name: 'Professional freedom', level: 1 })).toBeVisible()
+  await page.getByRole('button', { name: 'Soul, return to overview' }).click()
   await expect(page.getByRole('heading', { name: 'Soul' })).toBeVisible()
 })
 
@@ -83,4 +85,34 @@ test('shows the Primary goal without scrolling on desktop and phone', async ({ p
     expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(height)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   }
+})
+
+test('the back gesture steps back one page instead of leaving the app', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.cluster-open', { hasText: 'Create & Be Free' }).click()
+  await page.getByRole('button', { name: /Professional autonomy/ }).click()
+  await expect(page.getByRole('heading', { name: 'Professional autonomy', level: 1 })).toBeVisible()
+  expect(page.url()).toMatch(/#\/goal\/professional-autonomy$/)
+
+  await page.goBack()
+  await expect(page.getByRole('heading', { name: 'Create & Be Free', level: 1 })).toBeVisible()
+  await page.goBack()
+  await expect(page.getByRole('heading', { name: 'Active Frontier' })).toBeVisible()
+  expect(page.url()).toMatch(/\/soul\/$/)
+
+  await page.goForward()
+  await expect(page.getByRole('heading', { name: 'Create & Be Free', level: 1 })).toBeVisible()
+})
+
+test('opens a goal from a link and starts each page at the top', async ({ page }) => {
+  await page.goto('/#/goal/launch-blog')
+  await expect(page.getByRole('heading', { name: 'Launch Blog', level: 1 })).toBeVisible()
+
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Active Frontier' })).toBeVisible()
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+  await page.locator('.cluster-goal', { hasText: 'Philosophy / humanities' }).click()
+  await expect(page.getByRole('heading', { name: 'Philosophy / humanities', level: 1 })).toBeVisible()
+  expect(await page.evaluate(() => window.scrollY)).toBe(0)
 })

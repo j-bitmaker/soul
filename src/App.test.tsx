@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createSeedMap } from './domain/seed'
 import App from './App'
 
@@ -36,6 +36,7 @@ function clickOverviewGoal(name: RegExp): void {
 
 describe('Soul compass', () => {
   beforeEach(() => {
+    window.history.replaceState(null, '', '/')
     mocks.cached = false
     mocks.owner = true
     mocks.emitMap = null
@@ -44,6 +45,8 @@ describe('Soul compass', () => {
     mocks.signInOwner.mockReset()
     mocks.signOutOwner.mockReset()
   })
+
+  afterEach(() => { vi.restoreAllMocks() })
 
   it('shows the orientation, three clusters, and active frontier immediately', async () => {
     render(<App />)
@@ -62,6 +65,60 @@ describe('Soul compass', () => {
     fireEvent.click(screen.getByRole('button', { name: /Professional autonomy/ }))
     expect(screen.getByRole('heading', { name: 'Professional autonomy' })).toBeVisible()
     expect(screen.getByText(/stable professional and economic position/)).toBeVisible()
+  })
+
+  it('gives each page a history entry so the back gesture steps back one level', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Soul' })
+    clickOverviewGoal(/Create & Be Free/)
+    expect(window.location.hash).toBe('#/goal/create')
+    fireEvent.click(screen.getByRole('button', { name: /Professional autonomy/ }))
+    expect(window.location.hash).toBe('#/goal/professional-autonomy')
+    act(() => window.history.back())
+    expect(await screen.findByRole('heading', { name: 'Create & Be Free', level: 1 })).toBeVisible()
+    act(() => window.history.back())
+    expect(await screen.findByRole('heading', { name: 'Active Frontier' })).toBeVisible()
+    expect(window.location.hash).toBe('')
+    act(() => window.history.forward())
+    expect(await screen.findByRole('heading', { name: 'Create & Be Free', level: 1 })).toBeVisible()
+  })
+
+  it('keeps the page you left one step back after returning to the overview', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Soul' })
+    clickOverviewGoal(/Create & Be Free/)
+    fireEvent.click(screen.getByRole('button', { name: 'Soul, return to overview' }))
+    expect(window.location.hash).toBe('')
+    expect(screen.getByRole('heading', { name: 'Active Frontier' })).toBeVisible()
+    act(() => window.history.back())
+    expect(await screen.findByRole('heading', { name: 'Create & Be Free', level: 1 })).toBeVisible()
+  })
+
+  it('opens the page named by a link and treats unknown links as the overview', async () => {
+    window.history.replaceState(null, '', '/#/goal/launch-blog')
+    const first = render(<App />)
+    expect(await screen.findByRole('heading', { name: 'Launch Blog', level: 1 })).toBeVisible()
+    first.unmount()
+    window.history.replaceState(null, '', '/#/goal/does-not-exist')
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: 'Soul', level: 1 })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Active Frontier' })).toBeVisible()
+  })
+
+  it('does not leave an archived goal behind in the history', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Soul' })
+    const push = vi.spyOn(window.history, 'pushState')
+    const replace = vi.spyOn(window.history, 'replaceState')
+    clickOverviewGoal(/Launch Blog/)
+    expect(push).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
+    expect(await screen.findByRole('heading', { name: 'Active Frontier' })).toBeVisible()
+    expect(replace).toHaveBeenCalledTimes(1)
+    expect(push).toHaveBeenCalledTimes(1)
+    expect(window.location.hash).toBe('')
   })
 
   it('saves an edited goal through the explicit edit mode', async () => {
