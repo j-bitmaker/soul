@@ -57,7 +57,8 @@ describe('Soul compass', () => {
 
   it('zooms from a cluster into a goal without requiring extra fields', async () => {
     render(<App />)
-    fireEvent.click((await screen.findAllByRole('button', { name: /Create & Be Free/ }))[0])
+    await screen.findByRole('heading', { name: 'Soul' })
+    clickOverviewGoal(/Create & Be Free/)
     fireEvent.click(screen.getByRole('button', { name: /Professional autonomy/ }))
     expect(screen.getByRole('heading', { name: 'Professional autonomy' })).toBeVisible()
     expect(screen.getByText(/stable professional and economic position/)).toBeVisible()

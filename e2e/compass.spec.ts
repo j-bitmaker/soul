@@ -6,7 +6,7 @@ test('overview, focus, edit, export, and offline revisit', async ({ page, contex
   await expect(page.getByRole('heading', { name: 'Active Frontier' })).toBeVisible()
   await expect(page.locator('.frontier-section').getByRole('button', { name: /Professional autonomy/ })).toBeVisible()
 
-  await page.getByRole('button', { name: /Create & Be Free/ }).first().click()
+  await page.locator('.cluster-open', { hasText: 'Create & Be Free' }).click()
   await page.getByRole('button', { name: /Professional autonomy/ }).click()
   await expect(page.getByRole('heading', { name: 'Professional autonomy' })).toBeVisible()
 
@@ -65,8 +65,22 @@ test('uses modern type and gives each direction room at narrow widths', async ({
   const ordering = await page.evaluate(() => {
     const directions = document.querySelector('.cluster-grid')
     const frontier = document.querySelector('.frontier-section')
-    return Boolean(directions && frontier && directions.compareDocumentPosition(frontier) & Node.DOCUMENT_POSITION_FOLLOWING)
+    return Boolean(directions && frontier && frontier.compareDocumentPosition(directions) & Node.DOCUMENT_POSITION_FOLLOWING)
   })
   expect(ordering).toBe(true)
   await expect(page.locator('.cluster-card').first().getByRole('region', { name: 'Routine for Understand & Express' })).toContainText('Read Bible')
+})
+
+test('shows the Primary goal without scrolling on desktop and phone', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'mobile', 'This test sets its own viewports')
+  for (const [width, height] of [[1440, 900], [1280, 720], [390, 844]]) {
+    await page.setViewportSize({ width, height })
+    await page.goto('/')
+    const lead = page.locator('.frontier-lead')
+    await expect(lead).toContainText('Professional autonomy')
+    await expect(page.getByText('Unity with God. Life in the Holy Spirit, truth and conscience.')).toBeVisible()
+    const bounds = await lead.boundingBox()
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(height)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  }
 })

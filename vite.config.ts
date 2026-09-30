@@ -21,8 +21,8 @@ export default defineConfig({
       start_url: '/soul/',
       scope: '/soul/',
       display: 'standalone',
-      background_color: '#f7f5ef',
-      theme_color: '#f7f5ef',
+      background_color: '#f6f8f6',
+      theme_color: '#f6f8f6',
       icons: [
         { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
         { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
