@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createSeedMap } from './seed'
+import { activeIds, queuedIds } from './frontier'
 import { exportMap } from './validation'
 import {
   addGoal,
@@ -7,9 +8,10 @@ import {
   getVisibleChildren,
   mergeGoals,
   moveGoal,
+  placeInFrontier,
+  queueGoal,
   reorderGoal,
   restoreGoal,
-  setFrontierStatus,
   setSecondaryLinks,
   setVisibleChildren,
   toggleVisibleChild,
@@ -21,13 +23,13 @@ describe('goal map', () => {
     expect(map.nodes.soul.childrenIds).toEqual(['understand', 'create', 'mastery'])
     expect(Object.keys(map.nodes)).toHaveLength(19)
     expect(map.frontier).toEqual([
-      { nodeId: 'professional-autonomy', status: 'primary' },
+      { nodeId: 'professional-autonomy', status: 'active' },
       { nodeId: 'launch-blog', status: 'active' },
-      { nodeId: 'english-c1', status: 'maintain' },
+      { nodeId: 'english-c1', status: 'active' },
+      { nodeId: 'theology-scripture', status: 'queued' },
+      { nodeId: 'software-ai', status: 'queued' },
     ])
-    expect(map.nodes.understand.routines).toEqual([
-      { id: 'read-bible', title: 'Read Bible', cadence: 'Daily' },
-    ])
+    expect(map.nodes.understand.labels).toEqual([{ id: 'read-bible', text: 'Read Bible · Daily' }])
   })
 
   it('adds a title-only goal without exceeding five visible children', () => {
@@ -38,14 +40,75 @@ describe('goal map', () => {
     expect(getVisibleChildren(map, 'understand').map((node) => node.id)).not.toContain('new-goal')
   })
 
-  it('keeps one Primary and caps the frontier at five', () => {
-    let map = setFrontierStatus(createSeedMap(), 'software-ai', 'primary')
-    expect(map.frontier.filter((entry) => entry.status === 'primary')).toEqual([
-      { nodeId: 'software-ai', status: 'primary' },
-    ])
-    map = setFrontierStatus(map, 'own-products', 'active')
-    expect(map.frontier).toHaveLength(5)
-    expect(() => setFrontierStatus(map, 'attention-focus', 'active')).toThrow(/five/i)
+  it('orders the Active lane, leads with its first goal, and can queue or remove a goal', () => {
+    let map = placeInFrontier(createSeedMap(), 'own-products', 'active', 0)
+    expect(activeIds(map.frontier)).toEqual(['own-products', 'professional-autonomy', 'launch-blog', 'english-c1'])
+    map = placeInFrontier(map, 'own-products', 'queue')
+    expect(activeIds(map.frontier)).toEqual(['professional-autonomy', 'launch-blog', 'english-c1'])
+    expect(queuedIds(map.frontier)).toEqual(['theology-scripture', 'software-ai', 'own-products'])
+    map = placeInFrontier(map, 'english-c1', 'active', 0)
+    expect(activeIds(map.frontier)).toEqual(['english-c1', 'professional-autonomy', 'launch-blog'])
+    map = placeInFrontier(map, 'theology-scripture', null)
+    expect(map.frontier.some((entry) => entry.nodeId === 'theology-scripture')).toBe(false)
+    expect(() => exportMap(map)).not.toThrow()
+  })
+
+  it('sends the last active goal to the front of the Queue when Active is full', () => {
+    let map = placeInFrontier(createSeedMap(), 'own-products', 'active')
+    map = placeInFrontier(map, 'attention-focus', 'active')
+    expect(activeIds(map.frontier)).toHaveLength(5)
+    map = placeInFrontier(map, 'habits-self-control', 'active', 1)
+    expect(activeIds(map.frontier)).toEqual(['professional-autonomy', 'habits-self-control', 'launch-blog', 'english-c1', 'own-products'])
+    expect(queuedIds(map.frontier)).toEqual(['attention-focus', 'theology-scripture', 'software-ai'])
+    const last = placeInFrontier(map, 'cognitive-condition', 'active', 99)
+    expect(activeIds(last.frontier)).toContain('cognitive-condition')
+    expect(queuedIds(last.frontier)[0]).toBe('own-products')
+  })
+
+  it('can refuse a sixth active goal instead of moving one out', () => {
+    let map = placeInFrontier(createSeedMap(), 'own-products', 'active')
+    map = placeInFrontier(map, 'attention-focus', 'active')
+    expect(() => placeInFrontier(map, 'habits-self-control', 'active', undefined, 'reject')).toThrow(/at most 5/i)
+    expect(activeIds(placeInFrontier(map, 'launch-blog', 'active', 0, 'reject').frontier)[0]).toBe('launch-blog')
+  })
+
+  it('does not let archived goals, clusters, or Soul into the frontier', () => {
+    const archived = archiveGoal(createSeedMap(), 'own-products')
+    expect(() => placeInFrontier(archived, 'own-products', 'queue')).toThrow(/archived/i)
+    expect(() => placeInFrontier(createSeedMap(), 'create', 'active')).toThrow(/permanent/i)
+    expect(() => placeInFrontier(createSeedMap(), 'soul', 'queue')).toThrow(/permanent/i)
+  })
+
+  it('queues a new title-only goal under a direction in one step', () => {
+    const map = queueGoal(createSeedMap(), { id: 'read-more', title: '  Read more  ', parentId: 'create' })
+    expect(map.nodes['read-more'].title).toBe('Read more')
+    expect(map.nodes.create.childrenIds).toContain('read-more')
+    expect(queuedIds(map.frontier).at(-1)).toBe('read-more')
+    expect(() => exportMap(map)).not.toThrow()
+  })
+
+  it('keeps any sequence of operations valid', () => {
+    let seed = 7
+    const next = (limit: number): number => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % limit }
+    let map = createSeedMap()
+    const ids = Object.keys(map.nodes).filter((id) => !['soul', 'understand', 'create', 'mastery'].includes(id))
+    for (let step = 0; step < 300; step += 1) {
+      const id = ids[next(ids.length)]
+      const other = ids[next(ids.length)]
+      try {
+        const op = next(6)
+        if (op === 0) map = placeInFrontier(map, id, 'active', next(7))
+        else if (op === 1) map = placeInFrontier(map, id, 'queue', next(7))
+        else if (op === 2) map = placeInFrontier(map, id, null)
+        else if (op === 3) map = archiveGoal(map, id)
+        else if (op === 4) map = restoreGoal(map, id)
+        else map = mergeGoals(map, id, other)
+      } catch {
+        // a refused operation must leave the map untouched and valid
+      }
+      if (!map.nodes[ids[0]]) ids.shift()
+      expect(() => exportMap(map)).not.toThrow()
+    }
   })
 
   it('allows secondary links while rejecting placement cycles', () => {
@@ -86,6 +149,7 @@ describe('goal map', () => {
     const map = archiveGoal(createSeedMap(), 'launch-blog')
     expect(map.nodes['launch-blog'].archived).toBe(true)
     expect(map.frontier.some((entry) => entry.nodeId === 'launch-blog')).toBe(false)
+    expect(activeIds(archiveGoal(createSeedMap(), 'professional-autonomy').frontier)[0]).toBe('launch-blog')
     expect(getVisibleChildren(map, 'understand').map((node) => node.id)).not.toContain('launch-blog')
   })
 
@@ -110,33 +174,45 @@ describe('goal map', () => {
     expect(map.frontier.some((entry) => entry.nodeId === 'launch-blog')).toBe(false)
   })
 
-  it('preserves routines through moves and archives', () => {
-    const seed = createSeedMap()
-    const withRoutine = { ...seed, nodes: { ...seed.nodes,
-      'launch-blog': { ...seed.nodes['launch-blog'], routines: [{ id: 'publish', title: 'Write', cadence: 'Weekly' }] },
-    } }
-    const moved = moveGoal(withRoutine, 'launch-blog', 'create')
-    const archived = archiveGoal(moved, 'launch-blog')
-    expect(archived.nodes['launch-blog'].routines).toEqual([{ id: 'publish', title: 'Write', cadence: 'Weekly' }])
+  it('keeps the earlier place and the higher lane when merging frontier goals', () => {
+    const activeWins = mergeGoals(createSeedMap(), 'theology-scripture', 'launch-blog')
+    expect(activeIds(activeWins.frontier)).toEqual(['professional-autonomy', 'launch-blog', 'english-c1'])
+    expect(queuedIds(activeWins.frontier)).toEqual(['software-ai'])
+    const promoted = mergeGoals(createSeedMap(), 'english-c1', 'theology-scripture')
+    expect(activeIds(promoted.frontier)).toEqual(['professional-autonomy', 'launch-blog', 'theology-scripture'])
+    expect(queuedIds(promoted.frontier)).toEqual(['software-ai'])
   })
 
-  it('merges routines from both goals and gives conflicting source IDs unique names', () => {
+  it('preserves labels through moves and archives', () => {
     const seed = createSeedMap()
-    const source = { ...seed.nodes['launch-blog'], routines: [
-      { id: 'daily', title: 'Write', cadence: 'Daily' },
-      { id: 'weekly', title: 'Review', cadence: 'Weekly' },
+    const withLabel = { ...seed, nodes: { ...seed.nodes,
+      'launch-blog': { ...seed.nodes['launch-blog'], labels: [{ id: 'publish', text: 'Write weekly' }] },
+    } }
+    const moved = moveGoal(withLabel, 'launch-blog', 'create')
+    const archived = archiveGoal(moved, 'launch-blog')
+    expect(archived.nodes['launch-blog'].labels).toEqual([{ id: 'publish', text: 'Write weekly' }])
+  })
+
+  it('merges labels from both goals, skips duplicate text, and gives conflicting source IDs unique names', () => {
+    const seed = createSeedMap()
+    const source = { ...seed.nodes['launch-blog'], labels: [
+      { id: 'daily', text: 'Write daily' },
+      { id: 'weekly', text: 'Review weekly' },
+      { id: 'same', text: 'Shared' },
     ] }
-    const target = { ...seed.nodes['clear-speech-writing'], routines: [
-      { id: 'daily', title: 'Speak', cadence: 'Daily' },
-      { id: 'launch-blog-daily', title: 'Listen' },
+    const target = { ...seed.nodes['clear-speech-writing'], labels: [
+      { id: 'daily', text: 'Speak daily' },
+      { id: 'launch-blog-daily', text: 'Listen' },
+      { id: 'other', text: 'Shared' },
     ] }
     const map = { ...seed, nodes: { ...seed.nodes, 'launch-blog': source, 'clear-speech-writing': target } }
     const merged = mergeGoals(map, 'launch-blog', 'clear-speech-writing')
-    expect(merged.nodes['clear-speech-writing'].routines).toEqual([
-      { id: 'daily', title: 'Speak', cadence: 'Daily' },
-      { id: 'launch-blog-daily', title: 'Listen' },
-      { id: 'launch-blog-daily-2', title: 'Write', cadence: 'Daily' },
-      { id: 'weekly', title: 'Review', cadence: 'Weekly' },
+    expect(merged.nodes['clear-speech-writing'].labels).toEqual([
+      { id: 'daily', text: 'Speak daily' },
+      { id: 'launch-blog-daily', text: 'Listen' },
+      { id: 'other', text: 'Shared' },
+      { id: 'launch-blog-daily-2', text: 'Write daily' },
+      { id: 'weekly', text: 'Review weekly' },
     ])
     expect(() => exportMap(merged)).not.toThrow()
   })

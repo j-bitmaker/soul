@@ -15,7 +15,7 @@ import {
   runTransaction,
 } from 'firebase/firestore'
 import type { GoalMap } from '../domain/types'
-import { exportMap, validateMap } from '../domain/validation'
+import { exportMap, parseStoredMap } from '../domain/validation'
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -75,8 +75,7 @@ let services: Services | undefined
 
 function parseMap(value: unknown): GoalMap {
   try {
-    validateMap(value)
-    return value
+    return parseStoredMap(value)
   } catch {
     throw new MapDataError()
   }

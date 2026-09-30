@@ -13,12 +13,11 @@ test('overview, focus, edit, export, and offline revisit', async ({ page, contex
   await page.getByRole('button', { name: 'Edit', exact: true }).click()
   await page.getByRole('button', { name: 'Edit goal' }).click()
   await page.getByLabel('Name').fill('Professional freedom')
-  await page.getByRole('button', { name: 'Add routine' }).click()
-  await page.getByRole('textbox', { name: 'Routine title 1' }).fill('Review opportunities')
-  await page.getByRole('textbox', { name: 'Routine cadence 1' }).fill('Weekly')
+  await page.getByRole('button', { name: 'Add label' }).click()
+  await page.getByRole('textbox', { name: 'Label 1' }).fill('Review opportunities · Weekly')
   await page.getByRole('button', { name: 'Save goal' }).click()
   await expect(page.getByRole('heading', { name: 'Professional freedom' })).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Routine for Professional freedom' })).toContainText('Review opportunities')
+  await expect(page.locator('.focus-meta .label-pill', { hasText: 'Review opportunities · Weekly' })).toBeVisible()
 
   await page.getByRole('button', { name: 'More options' }).click()
   const download = page.waitForEvent('download')
@@ -70,7 +69,9 @@ test('uses modern type and gives each direction room at narrow widths', async ({
     return Boolean(directions && frontier && directions.compareDocumentPosition(frontier) & Node.DOCUMENT_POSITION_FOLLOWING)
   })
   expect(ordering).toBe(true)
-  await expect(page.locator('.cluster-card').first().getByRole('region', { name: 'Routine for Understand & Express' })).toContainText('Read Bible')
+  await expect(page.locator('.cluster-card').first().locator('.cluster-labels')).toContainText('Read Bible · Daily')
+  await expect(page.locator('.queue-section')).toContainText('Theology / Scripture')
+  expect(await page.locator('.frontier-status').count()).toBe(0)
 })
 
 test('shows what Soul means and the Primary goal without overflow on desktop and phone', async ({ page }, testInfo) => {

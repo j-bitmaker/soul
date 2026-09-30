@@ -1,4 +1,9 @@
-export type FrontierStatus = 'primary' | 'active' | 'maintain'
+/** Stored lane of a Frontier entry. Order decides priority; the first active entry is the Primary (derived, not stored). */
+export type FrontierStatus = 'active' | 'queued'
+
+export type FrontierLane = 'active' | 'queue'
+
+export const MAX_ACTIVE = 5
 
 export interface Milestone {
   id: string
@@ -6,10 +11,10 @@ export interface Milestone {
   done: boolean
 }
 
-export interface Routine {
+/** A free-form note on a goal, shown as a small pill. */
+export interface Label {
   id: string
-  title: string
-  cadence?: string
+  text: string
 }
 
 export interface GoalNode {
@@ -23,7 +28,7 @@ export interface GoalNode {
   current?: string
   target?: string
   milestones?: Milestone[]
-  routines?: Routine[]
+  labels?: Label[]
   reminders?: string[]
   note?: string
   archived?: boolean

@@ -1,5 +1,6 @@
+import { fromLegacyOrder } from './frontier'
 import type { GoalMap } from './types'
-import { CLUSTER_IDS, ROOT_ID } from './types'
+import { CLUSTER_IDS, MAX_ACTIVE, ROOT_ID } from './types'
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid map object')
@@ -26,7 +27,7 @@ function optionalText(value: unknown, name: string): void {
 function validateNode(id: string, value: unknown, ids: Set<string>): void {
   const node = object(value)
   knownFields(node, ['id', 'title', 'parentId', 'childrenIds', 'visibleChildIds', 'secondaryIds',
-    'description', 'current', 'target', 'milestones', 'routines', 'reminders', 'note', 'archived'])
+    'description', 'current', 'target', 'milestones', 'labels', 'reminders', 'note', 'archived'])
   if (node.id !== id || typeof node.title !== 'string' || !node.title.trim()) {
     throw new Error(`Invalid node ${id}`)
   }
@@ -45,21 +46,20 @@ function validateNode(id: string, value: unknown, ids: Set<string>): void {
   if (node.archived !== undefined && typeof node.archived !== 'boolean') throw new Error(`Invalid archived flag for ${id}`)
   if (node.reminders !== undefined) strings(node.reminders, 'reminders')
   if (node.milestones !== undefined) validateMilestones(node.milestones)
-  if (node.routines !== undefined) validateRoutines(node.routines)
+  if (node.labels !== undefined) validateLabels(node.labels)
 }
 
-function validateRoutines(value: unknown): void {
-  if (!Array.isArray(value)) throw new Error('Invalid routines')
+function validateLabels(value: unknown): void {
+  if (!Array.isArray(value)) throw new Error('Invalid labels')
   const ids = new Set<string>()
   for (const item of value) {
-    const routine = object(item)
-    knownFields(routine, ['id', 'title', 'cadence'])
-    if (typeof routine.id !== 'string' || !routine.id.trim() ||
-      typeof routine.title !== 'string' || !routine.title.trim() || ids.has(routine.id)) {
-      throw new Error('Invalid routine')
+    const label = object(item)
+    knownFields(label, ['id', 'text'])
+    if (typeof label.id !== 'string' || !label.id.trim() ||
+      typeof label.text !== 'string' || !label.text.trim() || ids.has(label.id)) {
+      throw new Error('Invalid label')
     }
-    optionalText(routine.cadence, 'routine cadence')
-    ids.add(routine.id)
+    ids.add(label.id)
   }
 }
 
@@ -98,22 +98,22 @@ function validateTree(nodes: Record<string, unknown>): void {
 }
 
 function validateFrontier(value: unknown, nodes: Record<string, unknown>): void {
-  if (!Array.isArray(value) || value.length > 5) throw new Error('Invalid frontier size')
+  if (!Array.isArray(value)) throw new Error('Invalid frontier')
   const seen = new Set<string>()
-  let primaryCount = 0
+  let activeCount = 0
   for (const entry of value) {
     const item = object(entry)
     knownFields(item, ['nodeId', 'status'])
     if (typeof item.nodeId !== 'string' || !nodes[item.nodeId] ||
-      !['primary', 'active', 'maintain'].includes(item.status as string) || seen.has(item.nodeId)) {
+      !['active', 'queued'].includes(item.status as string) || seen.has(item.nodeId)) {
       throw new Error('Invalid frontier entry')
     }
     if ([ROOT_ID, ...CLUSTER_IDS].includes(item.nodeId)) throw new Error('Invalid frontier goal')
     if (object(nodes[item.nodeId]).archived) throw new Error('Archived frontier goal')
-    if (item.status === 'primary') primaryCount += 1
+    if (item.status === 'active') activeCount += 1
     seen.add(item.nodeId)
   }
-  if (primaryCount > 1) throw new Error('Invalid frontier: multiple Primary goals')
+  if (activeCount > MAX_ACTIVE) throw new Error('Invalid frontier size')
 }
 
 export function validateMap(value: unknown): asserts value is GoalMap {
@@ -134,6 +134,57 @@ export function validateMap(value: unknown): asserts value is GoalMap {
   validateFrontier(map.frontier, nodes)
 }
 
+function isPlain(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+/** Old routines become labels: "title · cadence". Malformed input is left alone so validation rejects it. */
+function migrateNode(node: unknown): unknown {
+  if (!isPlain(node) || !Array.isArray(node.routines)) return node
+  const { routines, ...rest } = node
+  const labels: { id: string; text: string }[] = Array.isArray(rest.labels) ? [...rest.labels] : []
+  const ids = new Set(labels.map((label) => (isPlain(label) ? label.id : undefined)))
+  for (const routine of routines) {
+    if (!isPlain(routine) || typeof routine.id !== 'string' || typeof routine.title !== 'string' ||
+      !routine.title.trim() || !routine.id.trim() ||
+      (routine.cadence !== undefined && typeof routine.cadence !== 'string')) return node
+    let id = routine.id
+    for (let suffix = 2; ids.has(id); suffix += 1) id = `${routine.id}-${suffix}`
+    ids.add(id)
+    const cadence = typeof routine.cadence === 'string' ? routine.cadence.trim() : ''
+    labels.push({ id, text: cadence ? `${routine.title.trim()} · ${cadence}` : routine.title.trim() })
+  }
+  return labels.length ? { ...rest, labels } : rest
+}
+
+const FRONTIER_STATUSES = ['primary', 'active', 'maintain', 'queued']
+
+function migrateFrontier(frontier: unknown[]): unknown[] {
+  const tidy = frontier.every((entry) => isPlain(entry) && typeof entry.nodeId === 'string' &&
+    FRONTIER_STATUSES.includes(entry.status as string) && Object.keys(entry).length === 2)
+  return tidy ? fromLegacyOrder(frontier as { nodeId: string; status: string }[]) : frontier
+}
+
+/**
+ * Brings older maps to the current shape without losing anything: routines become labels and the
+ * old Primary/Active/Maintain statuses become an order (the first active goal is the Primary). Pure and idempotent.
+ */
+export function migrateMap(value: unknown): unknown {
+  if (!isPlain(value)) return value
+  const map = { ...value }
+  if (isPlain(map.nodes)) {
+    map.nodes = Object.fromEntries(Object.entries(map.nodes).map(([id, node]) => [id, migrateNode(node)]))
+  }
+  if (Array.isArray(map.frontier)) map.frontier = migrateFrontier(map.frontier)
+  return map
+}
+
+export function parseStoredMap(value: unknown): GoalMap {
+  const migrated = migrateMap(value)
+  validateMap(migrated)
+  return migrated
+}
+
 export function exportMap(map: GoalMap): string {
   validateMap(map)
   return `${JSON.stringify(map, null, 2)}\n`
@@ -146,6 +197,5 @@ export function parseMap(json: string): GoalMap {
   } catch {
     throw new Error('Invalid JSON')
   }
-  validateMap(value)
-  return value
+  return parseStoredMap(value)
 }

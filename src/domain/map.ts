@@ -1,4 +1,5 @@
-import { CLUSTER_IDS, ROOT_ID, type FrontierStatus, type GoalMap, type GoalNode, type Routine } from './types'
+import { normalizeFrontier, placeEntry, type WhenFull } from './frontier'
+import { CLUSTER_IDS, ROOT_ID, type FrontierLane, type GoalMap, type GoalNode, type Label } from './types'
 
 function requireNode(map: GoalMap, id: string): GoalNode {
   const node = map.nodes[id]
@@ -50,16 +51,20 @@ export function addGoal(map: GoalMap, input: { id: string; title: string; parent
   return { ...map, nodes: { ...map.nodes, [parent.id]: nextParent, [node.id]: node } }
 }
 
-export function setFrontierStatus(map: GoalMap, id: string, status: FrontierStatus | null): GoalMap {
+/**
+ * Puts a goal into the Active lane or the Queue at a final position, or removes it (lane null).
+ * The first active goal is the Primary. A full Active lane sends its previous last goal to the front of the Queue
+ * unless whenFull is 'reject'.
+ */
+export function placeInFrontier(map: GoalMap, id: string, lane: FrontierLane | null, index?: number,
+  whenFull?: WhenFull): GoalMap {
   const node = requireGoal(map, id)
-  if (node.archived) throw new Error('Archived goals cannot enter the frontier')
-  let frontier = map.frontier.filter((entry) => entry.nodeId !== id)
-  if (status === 'primary') {
-    frontier = frontier.map((entry) => entry.status === 'primary' ? { ...entry, status: 'active' } : entry)
-  }
-  if (status) frontier = [...frontier, { nodeId: id, status }]
-  if (frontier.length > 5) throw new Error('The frontier holds at most five goals')
-  return { ...map, frontier }
+  if (lane && node.archived) throw new Error('Archived goals cannot enter the frontier')
+  return { ...map, frontier: placeEntry(map.frontier, id, lane, index, whenFull) }
+}
+
+export function queueGoal(map: GoalMap, input: { id: string; title: string; parentId: string }): GoalMap {
+  return placeInFrontier(addGoal(map, input), input.id, 'queue')
 }
 
 export function moveGoal(map: GoalMap, id: string, parentId: string): GoalMap {
@@ -102,12 +107,13 @@ export function archiveGoal(map: GoalMap, id: string): GoalMap {
   return { ...map,
     nodes: { ...map.nodes, [id]: { ...node, archived: true },
       [parent.id]: { ...parent, visibleChildIds: parent.visibleChildIds.filter((childId) => childId !== id) } },
-    frontier: map.frontier.filter((entry) => !isWithin(map, entry.nodeId, id)),
+    frontier: normalizeFrontier(map.frontier.filter((entry) => !isWithin(map, entry.nodeId, id))),
   }
 }
 
 export function restoreGoal(map: GoalMap, id: string): GoalMap {
   const node = requireGoal(map, id)
+  if (!node.archived) return map
   const parent = requireNode(map, node.parentId as string)
   if (parent.archived) throw new Error('Restore the parent first')
   const visibleChildIds = parent.visibleChildIds.length < 5
@@ -152,23 +158,27 @@ function mergedNote(source: GoalNode, target: GoalNode): string {
   return [target.note, `Merged from ${source.title}${sourceDetails ? `:\n${sourceDetails}` : ''}`].filter(Boolean).join('\n\n')
 }
 
-function mergedRoutines(source: GoalNode, target: GoalNode): Routine[] {
-  const routines = [...(target.routines ?? [])]
-  const ids = new Set(routines.map((item) => item.id))
-  for (const item of source.routines ?? []) {
+function mergedLabels(source: GoalNode, target: GoalNode): Label[] {
+  const labels = [...(target.labels ?? [])]
+  const ids = new Set(labels.map((item) => item.id))
+  const texts = new Set(labels.map((item) => item.text))
+  for (const item of source.labels ?? []) {
+    if (texts.has(item.text)) continue
     let id = item.id
     if (ids.has(id)) {
       const prefix = `${source.id}-${id}`
       id = prefix
       for (let suffix = 2; ids.has(id); suffix += 1) id = `${prefix}-${suffix}`
     }
-    routines.push({ ...item, id })
+    labels.push({ ...item, id })
     ids.add(id)
+    texts.add(item.text)
   }
-  return routines
+  return labels
 }
 
 function mergedTarget(source: GoalNode, target: GoalNode): GoalNode {
+  const labels = mergedLabels(source, target)
   const milestones = [...(target.milestones ?? []), ...(source.milestones ?? []).map((item) => ({
     ...item, id: `${source.id}-${item.id}`,
   }))]
@@ -178,7 +188,7 @@ function mergedTarget(source: GoalNode, target: GoalNode): GoalNode {
     secondaryIds: [...new Set([...target.secondaryIds, ...source.secondaryIds])].filter(
       (id) => id !== source.id && id !== target.id),
     current: target.current ?? source.current, target: target.target ?? source.target,
-    milestones, routines: mergedRoutines(source, target),
+    milestones, labels: labels.length ? labels : undefined,
     reminders: [...new Set([...(target.reminders ?? []), ...(source.reminders ?? [])])],
     note: mergedNote(source, target),
   }
@@ -201,10 +211,13 @@ export function mergeGoals(map: GoalMap, sourceId: string, targetId: string): Go
       secondaryIds: [...new Set(node.secondaryIds.map((link) => link === sourceId ? targetId : link))]
         .filter((link) => link !== id) }]
   })) as Record<string, GoalNode>
-  const sourceEntry = map.frontier.find((entry) => entry.nodeId === sourceId)
-  const targetEntry = map.frontier.find((entry) => entry.nodeId === targetId)
-  const status = sourceEntry?.status === 'primary' ? 'primary' : targetEntry?.status ?? sourceEntry?.status
-  const frontier = map.frontier.filter((entry) => entry.nodeId !== sourceId && entry.nodeId !== targetId)
-  if (status) frontier.push({ nodeId: targetId, status })
+  // The merged goal keeps the earlier place of the two and the higher lane (Active beats Queue).
+  const involved = map.frontier.filter((entry) => entry.nodeId === sourceId || entry.nodeId === targetId)
+  const firstIndex = map.frontier.findIndex((entry) => entry.nodeId === sourceId || entry.nodeId === targetId)
+  const status = involved.some((entry) => entry.status !== 'queued') ? 'active' : 'queued'
+  const frontier = normalizeFrontier(map.frontier.flatMap((entry, index) => {
+    if (entry.nodeId !== sourceId && entry.nodeId !== targetId) return [entry]
+    return index === firstIndex ? [{ nodeId: targetId, status }] : []
+  }))
   return { ...map, nodes, frontier }
 }

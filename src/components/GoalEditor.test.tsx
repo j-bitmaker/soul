@@ -60,17 +60,27 @@ describe('GoalEditor', () => {
     }))
   })
 
-  it('adds a Routine with an optional cadence to a goal', () => {
+  it('adds free-form labels to a goal and drops empty ones', () => {
     const onSave = vi.fn()
     render(<GoalEditor map={createSeedMap()} parentId="understand" open onClose={vi.fn()} onSave={onSave} />)
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Read deeply' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Add routine' }))
-    fireEvent.change(screen.getByLabelText('Routine title 1'), { target: { value: '  Read for 20 minutes  ' } })
-    fireEvent.change(screen.getByLabelText('Routine cadence 1'), { target: { value: '  Weekdays  ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add label' }))
+    fireEvent.change(screen.getByLabelText('Label 1'), { target: { value: '  Read for 20 minutes · weekdays  ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add label' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save goal' }))
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
-      routines: [expect.objectContaining({ title: 'Read for 20 minutes', cadence: 'Weekdays' })],
+      labels: [expect.objectContaining({ text: 'Read for 20 minutes · weekdays' })],
     }))
+  })
+
+  it('edits and removes the labels of an existing goal', () => {
+    const map = createSeedMap()
+    const onSave = vi.fn()
+    render(<GoalEditor map={map} node={map.nodes.understand} parentId="soul" open onClose={vi.fn()} onSave={onSave} />)
+    expect(screen.getByLabelText('Label 1')).toHaveValue('Read Bible · Daily')
+    fireEvent.click(screen.getByRole('button', { name: 'Remove label Read Bible · Daily' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save goal' }))
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ labels: [] }))
   })
 
   it('removes optional milestones and closes without saving', () => {
