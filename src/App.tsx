@@ -3,15 +3,14 @@ import type { User } from 'firebase/auth'
 import { CompassView } from './components/CompassView'
 import { GoalEditor, type GoalEditorValues } from './components/GoalEditor'
 import { DeleteDialog } from './components/DeleteDialog'
-import { LabelEditor } from './components/LabelEditor'
 import { MergeDialog } from './components/MergeDialog'
 import {
   firebaseConfigured, isOwner, saveMap, signInOwner, signOutOwner, subscribeToMap, subscribeToOwner,
 } from './data/firebase'
-import { addGoal, archiveGoal, deleteGoal, mergeGoals, moveGoal, placeInFrontier, queueGoal, reorderGoal, restoreGoal,
-  setSecondaryLinks, subtreeIds, toggleVisibleChild } from './domain/map'
+import { addGoal, archiveGoal, deleteGoal, mergeGoals, moveGoal, placeInFrontier, queueGoal, restoreGoal,
+  setNodeDetails, setSecondaryLinks, subtreeIds } from './domain/map'
 import { createSeedMap } from './domain/seed'
-import type { GoalMap, Label } from './domain/types'
+import type { GoalMap } from './domain/types'
 import { exportMap, parseMap, validateMap } from './domain/validation'
 import { readSelection, writeSelection, type NavigationMode } from './navigation'
 
@@ -95,7 +94,6 @@ export default function App() {
   const [loading, setLoading] = useState(firebaseConfigured)
   const [editMode, setEditMode] = useState(false)
   const [editorId, setEditorId] = useState<string | null | undefined>()
-  const [labelEditorId, setLabelEditorId] = useState<string | null>(null)
   const [editorBaseRevision, setEditorBaseRevision] = useState<number | null>(null)
   const [mergeId, setMergeId] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
@@ -104,7 +102,7 @@ export default function App() {
   const [error, setError] = useState('')
   const canEdit = !firebaseConfigured || (isOwner(owner) && !fromCache)
   const effectiveEditMode = editMode && canEdit
-  const dialogOpen = loginOpen || (canEdit && (editorId !== undefined || labelEditorId !== null || mergeId !== null || deleteId !== null))
+  const dialogOpen = loginOpen || (canEdit && (editorId !== undefined || mergeId !== null || deleteId !== null))
 
   function select(id: string | null, mode: NavigationMode = 'push'): void {
     if (id === readSelection()) return
@@ -118,23 +116,17 @@ export default function App() {
     setError('')
   }
 
-  function openLabelEditor(id: string): void {
-    setEditorBaseRevision(map.revision)
-    setLabelEditorId(id)
-    setError('')
-  }
-
   useEffect(() => {
     if (!firebaseConfigured) return
     const unsubscribeMap = subscribeToMap((remote, cached) => {
       setMap(remote ?? createSeedMap())
       setFromCache(cached)
       setLoading(false)
-      if (cached) { setEditMode(false); setEditorId(undefined); setLabelEditorId(null); setMergeId(null); setDeleteId(null) }
+      if (cached) { setEditMode(false); setEditorId(undefined); setMergeId(null); setDeleteId(null) }
     }, (cause) => { setError(cause.message); setLoading(false) })
     const unsubscribeOwner = subscribeToOwner((user) => {
       setOwner(user)
-      if (!isOwner(user)) { setEditMode(false); setEditorId(undefined); setLabelEditorId(null); setMergeId(null); setDeleteId(null) }
+      if (!isOwner(user)) { setEditMode(false); setEditorId(undefined); setMergeId(null); setDeleteId(null) }
     })
     return () => { unsubscribeMap(); unsubscribeOwner() }
   }, [])
@@ -173,19 +165,6 @@ export default function App() {
     }
     const saved = await persist((current) => applyEditor(current, editorId ?? null, values))
     if (saved) setEditorId(undefined)
-  }
-
-  async function saveLabelEditor(labels: Label[]): Promise<void> {
-    if (editorBaseRevision !== map.revision || !labelEditorId) {
-      setError('The map changed while this editor was open. Close it, review the latest labels, and edit again.')
-      return
-    }
-    const id = labelEditorId
-    const saved = await persist((current) => ({
-      ...current,
-      nodes: { ...current.nodes, [id]: { ...current.nodes[id], labels: labels.length ? labels : undefined } },
-    }))
-    if (saved) setLabelEditorId(null)
   }
 
   async function confirmDelete(): Promise<void> {
@@ -241,21 +220,18 @@ export default function App() {
     <CompassView map={map} selectedId={selectedId} editMode={effectiveEditMode} canEdit={canEdit} authEnabled={firebaseConfigured} busy={busy}
       onSelect={(id) => select(id)} onToggleEdit={() => setEditMode((value) => !value)}
       onOpenEditor={openEditor}
-      onOpenLabelEditor={openLabelEditor}
+      onEditNode={(id, details) => persist((current) => setNodeDetails(current, id, details))}
+      onAddGoal={(parentId, title) => persist((current) => addGoal(current, { id: crypto.randomUUID(), title, parentId }))}
       onPlace={(id, lane, index, whenFull = 'reject') => persist((current) => placeInFrontier(current, id, lane, index, whenFull))}
       onAddToQueue={(title, parentId) => persist((current) => queueGoal(current, { id: crypto.randomUUID(), title, parentId }))}
-      onReorder={(id, direction) => { void persist((current) => reorderGoal(current, id, direction)) }}
       onArchive={(id) => { void persist((current) => archiveGoal(current, id)).then((saved) => {
         if (saved) select(null, 'replace')
       }) }}
       onRestore={(id) => { void persist((current) => restoreGoal(current, id)) }}
-      onToggleVisible={(parentId, childId) => { void persist((current) => toggleVisibleChild(current, parentId, childId)) }}
       onOpenMerge={setMergeId} onDelete={setDeleteId} onExport={() => downloadMap(map)} onImport={(file) => { void importFile(file) }}
       onSignIn={() => { setError(''); setLoginOpen(true) }} onSignOut={() => { void signOut() }} />
     <GoalEditor map={map} node={editorId ? map.nodes[editorId] : undefined} parentId={selectedId ?? 'understand'}
       open={editorId !== undefined && canEdit} busy={busy} error={error} onClose={() => setEditorId(undefined)} onSave={(values) => { void saveEditor(values) }} />
-    {labelEditorId && canEdit && map.nodes[labelEditorId] && <LabelEditor key={labelEditorId} node={map.nodes[labelEditorId]}
-      busy={busy} error={error} onClose={() => setLabelEditorId(null)} onSave={(labels) => { void saveLabelEditor(labels) }} />}
     <DeleteDialog map={map} goalId={canEdit ? deleteId : null} busy={busy} error={error} onClose={() => setDeleteId(null)}
       onConfirm={() => { void confirmDelete() }} />
     <MergeDialog map={map} sourceId={canEdit ? mergeId : null} busy={busy} error={error} onClose={() => setMergeId(null)}

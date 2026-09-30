@@ -132,14 +132,12 @@ describe('Soul compass', () => {
     expect(await screen.findByRole('heading', { name: 'Write publicly' })).toBeVisible()
   })
 
-  it('edits a direction\'s labels without changing its protected identity', async () => {
+  it('edits a direction\'s labels in place, without edit mode, keeping its protected identity', async () => {
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: 'Understand & Express' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Edit labels' }))
     fireEvent.click(screen.getByRole('button', { name: 'Add label' }))
-    fireEvent.change(screen.getByLabelText('Label 2'), { target: { value: '  Pray for others  ' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save labels' }))
+    fireEvent.change(screen.getByLabelText('New label'), { target: { value: '  Pray for others  ' } })
+    fireEvent.keyDown(screen.getByLabelText('New label'), { key: 'Enter' })
     await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
     const saved = mocks.saveMap.mock.calls[0][0]
     expect(saved.nodes.understand.title).toBe('Understand & Express')
@@ -148,6 +146,50 @@ describe('Soul compass', () => {
       { id: 'read-bible', text: 'Read Bible · Daily' },
       expect.objectContaining({ text: 'Pray for others' }),
     ])
+  })
+
+  it('edits a goal\'s own text, steps, and reminders in place with one save each', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Soul' })
+    clickOverviewGoal(/English C1/)
+    fireEvent.click(within(screen.getByRole('heading', { level: 1 })).getByRole('button'))
+    fireEvent.change(screen.getByLabelText('Edit name'), { target: { value: 'English C2' } })
+    fireEvent.keyDown(screen.getByLabelText('Edit name'), { key: 'Enter' })
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
+    expect(mocks.saveMap.mock.calls[0][0].nodes['english-c1'].title).toBe('English C2')
+    expect(await screen.findByRole('heading', { name: 'English C2', level: 1 })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Discuss complex topics fluently: mark done' }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(2))
+    expect(mocks.saveMap.mock.calls[1][0].nodes['english-c1'].milestones[0].done).toBe(true)
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove reminder Writing' }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(3))
+    expect(mocks.saveMap.mock.calls[2][0].nodes['english-c1'].reminders).toEqual(['Speaking practice', 'Grammar', 'Reading'])
+  })
+
+  it('adds a goal to a page with one line and clears the field', async () => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Create & Be Free' }))
+    fireEvent.change(screen.getByLabelText('New goal'), { target: { value: 'Learn to sell' } })
+    fireEvent.keyDown(screen.getByLabelText('New goal'), { key: 'Enter' })
+    fireEvent.submit(screen.getByLabelText('New goal').closest('form') as HTMLFormElement)
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
+    const saved = mocks.saveMap.mock.calls[0][0]
+    const added = Object.values(saved.nodes as Record<string, { id: string; title: string; parentId: string }>).find((node) => node.title === 'Learn to sell')
+    expect(added).toMatchObject({ parentId: 'create' })
+    expect(saved.nodes.create.childrenIds).toContain(added?.id)
+    expect(saved.frontier.some((entry: { nodeId: string }) => entry.nodeId === added?.id)).toBe(false)
+    await waitFor(() => expect(screen.getByLabelText('New goal')).toHaveValue(''))
+    expect(await screen.findByText('Learn to sell')).toBeVisible()
+  })
+
+  it('keeps what was typed and shows the error when an inline save fails', async () => {
+    mocks.saveMap.mockRejectedValueOnce(new Error('Network unavailable'))
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Create & Be Free' }))
+    fireEvent.change(screen.getByLabelText('New goal'), { target: { value: 'Learn to sell' } })
+    fireEvent.submit(screen.getByLabelText('New goal').closest('form') as HTMLFormElement)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Network unavailable')
+    expect(screen.getByLabelText('New goal')).toHaveValue('Learn to sell')
   })
 
   it('keeps the editor open and reports a failed save', async () => {
