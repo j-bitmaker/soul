@@ -12,6 +12,7 @@ import { addGoal, archiveGoal, mergeGoals, moveGoal, reorderGoal, restoreGoal,
 import { createSeedMap } from './domain/seed'
 import type { GoalMap, Routine } from './domain/types'
 import { exportMap, parseMap, validateMap } from './domain/validation'
+import { readSelection, writeSelection, type NavigationMode } from './navigation'
 
 const LOCAL_KEY = 'soul-compass-preview'
 
@@ -87,7 +88,7 @@ function OwnerLogin({ open, busy, error, onClose, onLogin }: {
 
 export default function App() {
   const [map, setMap] = useState(initialMap)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(readSelection)
   const [owner, setOwner] = useState<User | null>(null)
   const [fromCache, setFromCache] = useState(false)
   const [loading, setLoading] = useState(firebaseConfigured)
@@ -102,6 +103,12 @@ export default function App() {
   const canEdit = !firebaseConfigured || (isOwner(owner) && !fromCache)
   const effectiveEditMode = editMode && canEdit
   const dialogOpen = loginOpen || (canEdit && (editorId !== undefined || routineEditorId !== null || mergeId !== null))
+
+  function select(id: string | null, mode: NavigationMode = 'push'): void {
+    if (id === readSelection()) return
+    writeSelection(id, mode)
+    setSelectedId(id)
+  }
 
   function openEditor(id?: string): void {
     setEditorBaseRevision(map.revision)
@@ -129,6 +136,14 @@ export default function App() {
     })
     return () => { unsubscribeMap(); unsubscribeOwner() }
   }, [])
+
+  useEffect(() => {
+    const onPopState = () => setSelectedId(readSelection())
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
+  useEffect(() => { window.scrollTo(0, 0) }, [selectedId])
 
   async function persist(change: (current: GoalMap) => GoalMap): Promise<boolean> {
     if (busy || !canEdit) return false
@@ -211,13 +226,13 @@ export default function App() {
     {fromCache && <p className="state-banner">Offline copy · Editing is paused until the latest map is available.</p>}
     {error && !dialogOpen && <div className="state-banner error-banner" role="alert">{error} <button onClick={() => window.location.reload()}>Reload map</button></div>}
     <CompassView map={map} selectedId={selectedId} editMode={effectiveEditMode} canEdit={canEdit} authEnabled={firebaseConfigured} busy={busy}
-      onSelect={setSelectedId} onToggleEdit={() => setEditMode((value) => !value)}
+      onSelect={(id) => select(id)} onToggleEdit={() => setEditMode((value) => !value)}
       onOpenEditor={openEditor}
       onOpenRoutineEditor={openRoutineEditor}
       onSetFrontier={(id, status) => { void persist((current) => setFrontierStatus(current, id, status)) }}
       onReorder={(id, direction) => { void persist((current) => reorderGoal(current, id, direction)) }}
       onArchive={(id) => { void persist((current) => archiveGoal(current, id)).then((saved) => {
-        if (saved) setSelectedId(null)
+        if (saved) select(null, 'replace')
       }) }}
       onRestore={(id) => { void persist((current) => restoreGoal(current, id)) }}
       onToggleVisible={(parentId, childId) => { void persist((current) => toggleVisibleChild(current, parentId, childId)) }}
@@ -229,7 +244,7 @@ export default function App() {
       busy={busy} error={error} onClose={() => setRoutineEditorId(null)} onSave={(routines) => { void saveRoutineEditor(routines) }} />}
     <MergeDialog map={map} sourceId={canEdit ? mergeId : null} busy={busy} error={error} onClose={() => setMergeId(null)}
       onMerge={(targetId) => { void persist((current) => mergeGoals(current, mergeId as string, targetId)).then((saved) => {
-        if (saved) { setSelectedId(targetId); setMergeId(null) }
+        if (saved) { select(targetId, 'replace'); setMergeId(null) }
       }) }} />
     <OwnerLogin key={loginOpen ? 'open' : 'closed'} open={loginOpen} busy={busy} error={loginOpen ? error : ''} onClose={() => setLoginOpen(false)} onLogin={(email, password) => { void login(email, password) }} />
   </>
