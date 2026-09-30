@@ -455,4 +455,27 @@ describe('CompassView', () => {
     expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Owner sign in' })).not.toBeInTheDocument()
   })
+
+  it('shows the directions as cards by default and switches to the orbit, remembering the choice', () => {
+    window.localStorage.clear()
+    const view = props()
+    const rendered = render(<CompassView {...view} />)
+    expect(document.querySelector('.cluster-grid')).not.toBeNull()
+    expect(document.querySelector('.orbit')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Cards' })).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Orbit' }))
+    expect(document.querySelector('.cluster-grid')).toBeNull()
+    expect(document.querySelector('.orbit')).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Orbit' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(within(document.querySelector('.orbit') as HTMLElement).getByRole('button', { name: 'Self-Mastery' }))
+    expect(view.onSelect).toHaveBeenCalledWith('mastery')
+
+    rendered.unmount()
+    render(<CompassView {...props()} />)
+    expect(document.querySelector('.orbit')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Cards' }))
+    expect(document.querySelector('.cluster-grid')).not.toBeNull()
+    window.localStorage.clear()
+  })
 })

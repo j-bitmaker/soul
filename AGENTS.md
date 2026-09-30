@@ -19,6 +19,7 @@ This repository contains a single-user public Goal Map. Keep the product a calm 
 - A direction or goal page lists all its goals in one scrolling list, never in pages, in an automatic order: Active goals and the rest first, then the Queue, then the Archive (owner only). The old `visibleChildIds` field stays in the data but the UI no longer uses it.
 - Active Frontier has at most five entries; the first is the Primary (lead card). Further goals wait in the Queue. Priority is set by dragging goals within and between Active and the Queue; there are no Primary/Active/Maintain status labels.
 - The owner edits in place, without a mode: name, meaning, current state, target, note, labels, milestones, reminders, and new goals are changed where they are shown. The Edit mode and its dialog are for the heavier actions (full editor, merge, archive, delete, priority select).
+- The three directions can be shown as Cards (default) or as an Orbit: a ring around Soul with two-way lines to Soul and clockwise arrows from each direction to the next. The choice is remembered in the browser only; the Orbit is a view, never data.
 - Goals and directions can carry free-form labels (small pills). Routines are no longer a separate category; old data migrates into labels on load.
 - Keep optional details optional. A title is enough to create a goal.
 - Preserve data when moving, archiving, importing, or merging goals. Never silently overwrite a newer remote revision.

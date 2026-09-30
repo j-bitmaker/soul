@@ -269,3 +269,66 @@ test('keeps a goal page inside the screen on phones', async ({ page }, testInfo)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   }
 })
+
+test('shows the directions in a circle around Soul and remembers the choice', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.locator('.cluster-grid')).toBeVisible()
+  await expect(page.locator('.orbit')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Cards' })).toHaveAttribute('aria-pressed', 'true')
+
+  await page.getByRole('button', { name: 'Orbit' }).click()
+  const orbit = page.locator('.orbit')
+  await expect(orbit).toBeVisible()
+  await expect(page.locator('.cluster-grid')).toHaveCount(0)
+  await expect(orbit.locator('.orbit-soul')).toContainText('Soul')
+  await expect(orbit.locator('.orbit-spoke')).toHaveCount(3)
+  await expect(orbit.locator('.orbit-arc')).toHaveCount(3)
+
+  const stage = (await orbit.boundingBox())!
+  const boxes = []
+  for (const name of ['Understand & Express', 'Create & Be Free', 'Self-Mastery']) {
+    const box = (await orbit.getByRole('button', { name }).boundingBox())!
+    expect(box.x).toBeGreaterThanOrEqual(stage.x - 1)
+    expect(box.x + box.width).toBeLessThanOrEqual(stage.x + stage.width + 1)
+    expect(box.y).toBeGreaterThanOrEqual(stage.y - 1)
+    expect(box.y + box.height).toBeLessThanOrEqual(stage.y + stage.height + 1)
+    boxes.push(box)
+  }
+  const apart = (a: typeof boxes[number], b: typeof boxes[number]) =>
+    a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y
+  expect(apart(boxes[0], boxes[1]) && apart(boxes[0], boxes[2]) && apart(boxes[1], boxes[2])).toBe(true)
+
+  await orbit.getByRole('button', { name: 'Create & Be Free' }).hover()
+  await expect(orbit.locator('.orbit-link.is-lit')).toHaveCount(3)
+
+  await page.reload()
+  await expect(page.locator('.orbit')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Orbit' })).toHaveAttribute('aria-pressed', 'true')
+
+  await page.locator('.orbit').getByRole('button', { name: 'Create & Be Free' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Create & Be Free' })).toBeVisible()
+  await page.goBack()
+  await expect(page.locator('.orbit')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Cards' }).click()
+  await expect(page.locator('.cluster-grid')).toBeVisible()
+  await page.reload()
+  await expect(page.locator('.cluster-grid')).toBeVisible()
+})
+
+test('keeps the orbit inside the screen and readable from phone to desktop', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'mobile', 'This test sets its own viewports')
+  for (const [width, height] of [[320, 700], [390, 844], [768, 900], [1280, 720]]) {
+    await page.setViewportSize({ width, height })
+    await page.goto('/')
+    if (await page.getByRole('button', { name: 'Orbit' }).getAttribute('aria-pressed') !== 'true') await page.getByRole('button', { name: 'Orbit' }).click()
+    await expect(page.locator('.orbit')).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    for (const name of ['Understand & Express', 'Create & Be Free', 'Self-Mastery']) {
+      const box = (await page.locator('.orbit').getByRole('button', { name }).boundingBox())!
+      expect(box.x).toBeGreaterThanOrEqual(0)
+      expect(box.x + box.width).toBeLessThanOrEqual(width)
+      expect(box.height).toBeGreaterThanOrEqual(24)
+    }
+  }
+})
