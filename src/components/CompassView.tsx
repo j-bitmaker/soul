@@ -6,6 +6,7 @@ import type { NodeDetails } from '../domain/map'
 import { Frontier } from './FrontierBoard'
 import { LabelPills, laneOf, nearestCluster, pathTo, toneById } from './goalView'
 import { EditableLabels, InlineAdd, InlineText } from './InlineEdit'
+import { DirectionsSwitch, OrbitView, readDirectionsView, writeDirectionsView, type DirectionsView } from './OrbitView'
 
 export interface CompassViewProps {
   map: GoalMap
@@ -114,6 +115,11 @@ function CompassMark() {
 
 function Overview({ props }: { props: CompassViewProps }) {
   const soul = props.map.nodes[ROOT_ID]
+  const [view, setView] = useState<DirectionsView>(readDirectionsView)
+  function changeView(next: DirectionsView): void {
+    setView(next)
+    writeDirectionsView(next)
+  }
   return <main className="page" id="main-content">
     <section className="orientation" aria-labelledby="soul-title">
       <div className="eyebrow">A mental compass</div>
@@ -122,11 +128,13 @@ function Overview({ props }: { props: CompassViewProps }) {
       <CompassMark />
     </section>
     <section className="directions-section" aria-labelledby="directions-title">
-      <div className="section-heading"><h2 id="directions-title">Three directions</h2><p>Distinct, alive, and connected</p></div>
-      <div className="cluster-grid">{CLUSTER_IDS.map((id) => {
-        const node = props.map.nodes[id]
-        return node && <ClusterCard key={id} node={node} map={props.map} onSelect={props.onSelect} />
-      })}</div>
+      <div className="section-heading"><h2 id="directions-title">Three directions</h2><DirectionsSwitch view={view} onChange={changeView} /></div>
+      {view === 'orbit'
+        ? <OrbitView map={props.map} onSelect={props.onSelect} />
+        : <div className="cluster-grid">{CLUSTER_IDS.map((id) => {
+          const node = props.map.nodes[id]
+          return node && <ClusterCard key={id} node={node} map={props.map} onSelect={props.onSelect} />
+        })}</div>}
     </section>
     <Frontier props={props} />
     <p className="footer-note">See clearly. Choose one thing. Begin.</p>
