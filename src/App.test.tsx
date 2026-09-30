@@ -55,7 +55,7 @@ describe('Soul compass', () => {
     expect(screen.getAllByRole('button', { name: /Create & Be Free/ })[0]).toBeVisible()
     expect(screen.getAllByRole('button', { name: /Self-Mastery/ })[0]).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Active Frontier' })).toBeVisible()
-    expect(within(document.querySelector('.frontier-section') as HTMLElement).getByRole('button', { name: /Professional autonomy/ })).toBeVisible()
+    expect(within(document.querySelector('.frontier-section') as HTMLElement).getByRole('button', { name: /Lead focus.*Professional autonomy/ })).toBeVisible()
   })
 
   it('zooms from a cluster into a goal without requiring extra fields', async () => {

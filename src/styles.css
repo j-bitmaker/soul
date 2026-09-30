@@ -193,8 +193,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .alive-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--tone); flex: none; }
 
 .frontier-section { margin-top: 44px; }
-.frontier-layout { display: grid; gap: 14px; }
-.frontier-lead-wrap { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.frontier-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.frontier-layout > *, .frontier-list, .queue-section { min-width: 0; }
+.frontier-lead-wrap { position: relative; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .frontier-lead-wrap .frontier-lead { flex: 1; }
 .frontier-lead-wrap > .edit-row { justify-content: flex-end; }
 .frontier-lead {
@@ -225,10 +226,23 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .queue-heading h3 { margin: 0; color: var(--muted); font-size: 11px; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; }
 .queue-heading p { margin: 0; color: var(--muted); font-size: 13px; }
 .queue-add { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.drag-handle { flex: none; width: 34px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: none; color: #7d887f; cursor: grab; touch-action: none; user-select: none; -webkit-touch-callout: none; }
+.drag-handle svg { width: 18px; height: 18px; }
+.drag-handle:hover { background: #e9ede6; color: var(--ink); }
+.drag-handle:active { cursor: grabbing; }
+.frontier-lead-wrap .drag-handle { position: absolute; z-index: 1; left: 10px; top: 14px; }
+.frontier-lead-wrap.drag-slot .frontier-lead { padding-left: 52px; }
+.drag-slot.is-dragging { opacity: .35; }
+.drag-slot.is-over { box-shadow: 0 -3px 0 0 var(--tone, var(--forest)); }
+.frontier-lead-wrap.is-over { box-shadow: none; }
+.frontier-lead-wrap.is-over .frontier-lead { border-color: var(--tone, var(--forest)); box-shadow: 0 -3px 0 0 var(--tone, var(--forest)); }
+.is-over-lane { border-radius: 16px; outline: 2px dashed #9db4a2; outline-offset: 8px; }
+.lane-hint { margin: 0; padding: 18px; border: 1.5px dashed var(--line); border-radius: 14px; color: var(--muted); font-size: 13px; text-align: center; }
+.drag-preview { display: flex; align-items: center; gap: 10px; max-width: 320px; padding: 12px 16px; border: 1px solid var(--tone, var(--forest)); border-radius: 14px; background: #fff; color: var(--ink); font-size: 15px; font-weight: 700; box-shadow: 0 14px 34px #1f352730; }
 .queue-add input, .queue-add select { min-height: 42px; border: 1px solid #cfd8cd; border-radius: 10px; background: #fffefa; padding: 8px 12px; color: var(--ink); }
 .queue-add input { flex: 1 1 220px; min-width: 0; }
 .frontier-row { min-width: 0; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 16px; }
-.frontier-open { min-height: 84px; width: 100%; padding: 14px 3px; display: flex; align-items: center; gap: 16px; border: 0; background: transparent; color: inherit; text-align: left; }
+.frontier-open { min-width: 0; min-height: 84px; width: 100%; padding: 14px 3px; display: flex; align-items: center; gap: 16px; border: 0; background: transparent; color: inherit; text-align: left; }
 .frontier-open:hover .frontier-title { color: var(--tone, var(--forest)); }
 .frontier-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
 .frontier-title { font-size: 17px; font-weight: 700; line-height: 1.3; transition: color .15s; }

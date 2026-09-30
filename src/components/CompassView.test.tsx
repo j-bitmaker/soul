@@ -40,8 +40,8 @@ describe('CompassView', () => {
     ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const frontier = within(document.querySelector('.frontier-section') as HTMLElement)
     expect(frontier.getByRole('button', { name: /Lead focus.*Professional autonomy/i })).toBeVisible()
-    expect(frontier.getByRole('button', { name: /Launch Blog/ })).toBeVisible()
-    expect(frontier.getByRole('button', { name: /English C1/ })).toBeVisible()
+    expect(frontier.getByRole('button', { name: /^Launch Blog/ })).toBeVisible()
+    expect(frontier.getByRole('button', { name: /^English C1/ })).toBeVisible()
     expect(document.querySelector('.frontier-status')).toBeNull()
     expect(screen.queryByText(/^(primary|active|maintain)$/i)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Create & Be Free' }))
@@ -65,8 +65,8 @@ describe('CompassView', () => {
     expect(lead).toHaveClass('frontier-lead')
     expect(lead).toHaveTextContent('Create & Be Free')
     expect(lead).toHaveTextContent('Target: A stable professional and economic position for the next several years.')
-    expect(within(frontier).getByRole('button', { name: /Launch Blog/ })).toHaveTextContent('Next: Publish the first working version')
-    expect(within(frontier).getByRole('button', { name: /English C1/ })).toHaveTextContent('B2-ish → C1')
+    expect(within(frontier).getByRole('button', { name: /^Launch Blog/ })).toHaveTextContent('Next: Publish the first working version')
+    expect(within(frontier).getByRole('button', { name: /^English C1/ })).toHaveTextContent('B2-ish → C1')
     expect(frontier.querySelectorAll('.frontier-lead')).toHaveLength(1)
   })
 
@@ -83,10 +83,10 @@ describe('CompassView', () => {
     map.nodes['attention-focus'].milestones = [{ id: 'm1', title: 'Done already', done: true }]
     render(<CompassView {...props(map)} />)
     const frontier = within(document.querySelector('.frontier-section') as HTMLElement)
-    expect(frontier.getByRole('button', { name: /Theology/ })).toHaveTextContent('Read the Gospel with the Fathers.')
-    expect(frontier.getByRole('button', { name: /Clear speech/ })).toHaveTextContent('Now: Rambling drafts')
-    expect(frontier.getByRole('button', { name: /Attention/ }).querySelector('.frontier-detail')).toBeNull()
-    expect(frontier.getByRole('button', { name: /Habits/ }).querySelector('.frontier-detail')).toBeNull()
+    expect(frontier.getByRole('button', { name: /Lead focus.*Theology/ })).toHaveTextContent('Read the Gospel with the Fathers.')
+    expect(frontier.getByRole('button', { name: /^Clear speech/ })).toHaveTextContent('Now: Rambling drafts')
+    expect(frontier.getByRole('button', { name: /^Attention/ }).querySelector('.frontier-detail')).toBeNull()
+    expect(frontier.getByRole('button', { name: /^Habits/ }).querySelector('.frontier-detail')).toBeNull()
   })
 
   it('shows the Queue under Active with each goal tinted by its direction', () => {
@@ -109,14 +109,15 @@ describe('CompassView', () => {
     const rendered = render(<CompassView {...props(map)} />)
     expect(document.querySelector('.frontier-lead')).toBeNull()
     expect(screen.getByText(/No current focus/)).toBeVisible()
-    expect(within(document.querySelector('.queue-section') as HTMLElement).getByRole('button', { name: /Launch Blog/ })).toBeVisible()
+    expect(within(document.querySelector('.queue-section') as HTMLElement).getByRole('button', { name: /^Launch Blog/ })).toBeVisible()
     map.frontier = []
     rendered.rerender(<CompassView {...props(map)} />)
     expect(screen.getByText(/No current focus/)).toBeVisible()
-    expect(document.querySelector('.queue-section')).toBeNull()
+    expect(screen.getByText('Drag a goal here to queue it')).toBeVisible()
     rendered.rerender(<CompassView {...props(map)} canEdit={false} />)
     expect(screen.queryByRole('heading', { name: 'Active Frontier' })).not.toBeInTheDocument()
     expect(screen.queryByText(/No current focus/)).not.toBeInTheDocument()
+    expect(document.querySelector('.queue-section')).toBeNull()
   })
 
   it('reorders Active and Queue goals and adds to the Queue in edit mode', async () => {
@@ -155,6 +156,23 @@ describe('CompassView', () => {
     expect(screen.queryByRole('button', { name: /^Delete/ })).not.toBeInTheDocument()
     rendered.rerender(<CompassView {...view} selectedId="create" />)
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+  })
+
+  it('gives the signed-in owner a drag handle on every Active and Queue goal, without edit mode', () => {
+    render(<CompassView {...props()} />)
+    const handles = screen.getAllByRole('button', { name: /^Drag / })
+    expect(handles.map((handle) => handle.getAttribute('aria-label'))).toEqual([
+      'Drag Professional autonomy', 'Drag Launch Blog', 'Drag English C1', 'Drag Theology / Scripture', 'Drag Software / AI Engineering',
+    ])
+  })
+
+  it('shows visitors no drag handles and no empty drop hints', () => {
+    const map = structuredClone(createSeedMap())
+    map.frontier = [{ nodeId: 'launch-blog', status: 'active' }]
+    render(<CompassView {...props(map)} canEdit={false} />)
+    expect(screen.queryByRole('button', { name: /^Drag / })).not.toBeInTheDocument()
+    expect(screen.queryByText('Drag a goal here to queue it')).not.toBeInTheDocument()
+    expect(document.querySelector('.queue-section')).toBeNull()
   })
 
   it('hides reorder and queue controls outside edit mode', () => {
@@ -263,7 +281,7 @@ describe('CompassView', () => {
     const rendered = render(<CompassView {...view} />)
     const card = document.querySelector('.cluster-card[data-tone="expression"]') as HTMLElement
     expect(card.querySelector('.cluster-labels')).toHaveTextContent('Read Bible · Daily')
-    expect(within(document.querySelector('.frontier-section') as HTMLElement).getByRole('button', { name: /English C1/ }))
+    expect(within(document.querySelector('.frontier-section') as HTMLElement).getByRole('button', { name: /^English C1/ }))
       .toHaveTextContent('Speaking practiceWeekly writing')
     expect(document.body).not.toHaveTextContent('Routine')
     rendered.rerender(<CompassView {...view} selectedId="understand" editMode />)
