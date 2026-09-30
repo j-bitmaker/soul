@@ -5,6 +5,7 @@ import { exportMap } from './validation'
 import {
   addGoal,
   archiveGoal,
+  deleteGoal,
   getVisibleChildren,
   mergeGoals,
   moveGoal,
@@ -14,6 +15,7 @@ import {
   restoreGoal,
   setSecondaryLinks,
   setVisibleChildren,
+  subtreeIds,
   toggleVisibleChild,
 } from './map'
 
@@ -96,12 +98,13 @@ describe('goal map', () => {
       const id = ids[next(ids.length)]
       const other = ids[next(ids.length)]
       try {
-        const op = next(6)
+        const op = next(7)
         if (op === 0) map = placeInFrontier(map, id, 'active', next(7))
         else if (op === 1) map = placeInFrontier(map, id, 'queue', next(7))
         else if (op === 2) map = placeInFrontier(map, id, null)
         else if (op === 3) map = archiveGoal(map, id)
         else if (op === 4) map = restoreGoal(map, id)
+        else if (op === 5) map = deleteGoal(map, id)
         else map = mergeGoals(map, id, other)
       } catch {
         // a refused operation must leave the map untouched and valid
@@ -151,6 +154,33 @@ describe('goal map', () => {
     expect(map.frontier.some((entry) => entry.nodeId === 'launch-blog')).toBe(false)
     expect(activeIds(archiveGoal(createSeedMap(), 'professional-autonomy').frontier)[0]).toBe('launch-blog')
     expect(getVisibleChildren(map, 'understand').map((node) => node.id)).not.toContain('launch-blog')
+  })
+
+  it('deletes a goal with everything nested under it and leaves no dangling reference', () => {
+    let map = createSeedMap()
+    map = addGoal(map, { id: 'child', title: 'Child', parentId: 'launch-blog' })
+    map = addGoal(map, { id: 'grandchild', title: 'Grandchild', parentId: 'child' })
+    map = archiveGoal(map, 'grandchild')
+    map = placeInFrontier(map, 'child', 'queue')
+    map = setSecondaryLinks(map, 'english-c1', ['launch-blog', 'child', 'create'])
+    map = setSecondaryLinks(map, 'launch-blog', ['child'])
+    expect(subtreeIds(map, 'launch-blog')).toEqual(['launch-blog', 'child', 'grandchild'])
+    const after = deleteGoal(map, 'launch-blog')
+    for (const id of ['launch-blog', 'child', 'grandchild']) expect(after.nodes[id]).toBeUndefined()
+    expect(after.nodes.understand.childrenIds).not.toContain('launch-blog')
+    expect(after.nodes.understand.visibleChildIds).not.toContain('launch-blog')
+    expect(after.nodes['english-c1'].secondaryIds).toEqual(['create'])
+    expect(after.frontier.map((entry) => entry.nodeId)).toEqual(['professional-autonomy', 'english-c1', 'theology-scripture', 'software-ai'])
+    expect(() => exportMap(after)).not.toThrow()
+    expect(map.nodes['launch-blog']).toBeDefined()
+  })
+
+  it('promotes the next goal to lead when the Primary goal is deleted, and refuses permanent nodes', () => {
+    const after = deleteGoal(createSeedMap(), 'professional-autonomy')
+    expect(activeIds(after.frontier)[0]).toBe('launch-blog')
+    expect(() => deleteGoal(createSeedMap(), 'create')).toThrow(/permanent/i)
+    expect(() => deleteGoal(createSeedMap(), 'soul')).toThrow(/permanent/i)
+    expect(() => deleteGoal(createSeedMap(), 'missing')).toThrow(/unknown/i)
   })
 
   it('restores an archived goal and controls whether it is in view', () => {

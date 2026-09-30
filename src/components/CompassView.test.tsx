@@ -9,7 +9,7 @@ function props(map: GoalMap = createSeedMap()): CompassViewProps {
     map, selectedId: null, editMode: false, canEdit: true,
     onSelect: vi.fn(), onToggleEdit: vi.fn(), onOpenEditor: vi.fn(),
     onPlace: vi.fn(), onAddToQueue: vi.fn(async () => true), onReorder: vi.fn(), onToggleVisible: vi.fn(),
-    onArchive: vi.fn(), onRestore: vi.fn(), onOpenMerge: vi.fn(),
+    onArchive: vi.fn(), onRestore: vi.fn(), onOpenMerge: vi.fn(), onDelete: vi.fn(),
     onOpenLabelEditor: vi.fn(), onExport: vi.fn(), onImport: vi.fn(), onSignIn: vi.fn(), onSignOut: vi.fn(),
   }
 }
@@ -135,6 +135,26 @@ describe('CompassView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add' }))
     expect(view.onAddToQueue).toHaveBeenCalledWith('Read more', 'create')
     await waitFor(() => expect(screen.getByLabelText('Add to the queue')).toHaveValue(''))
+  })
+
+  it('offers an explicit Delete on goal pages, archived rows, and Active and Queue rows in edit mode only', () => {
+    const view = { ...props(mapWithHiddenAndArchived()), selectedId: 'understand', editMode: true }
+    const rendered = render(<CompassView {...view} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Former focus' }))
+    expect(view.onDelete).toHaveBeenCalledWith('old-goal')
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    rendered.rerender(<CompassView {...view} selectedId="launch-blog" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(view.onDelete).toHaveBeenCalledWith('launch-blog')
+    rendered.rerender(<CompassView {...view} selectedId={null} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Professional autonomy' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Theology / Scripture' }))
+    expect(view.onDelete).toHaveBeenCalledWith('professional-autonomy')
+    expect(view.onDelete).toHaveBeenCalledWith('theology-scripture')
+    rendered.rerender(<CompassView {...view} selectedId={null} editMode={false} />)
+    expect(screen.queryByRole('button', { name: /^Delete/ })).not.toBeInTheDocument()
+    rendered.rerender(<CompassView {...view} selectedId="create" />)
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
   })
 
   it('hides reorder and queue controls outside edit mode', () => {

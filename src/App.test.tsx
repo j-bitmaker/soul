@@ -210,6 +210,49 @@ describe('Soul compass', () => {
     ])
   })
 
+  it('deletes a goal only after confirmation and returns to its direction', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Soul' })
+    clickOverviewGoal(/Launch Blog/)
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(mocks.saveMap).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Launch Blog', level: 1 })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
+    const saved = mocks.saveMap.mock.calls[0][0]
+    expect(saved.nodes['launch-blog']).toBeUndefined()
+    expect(saved.nodes.understand.childrenIds).not.toContain('launch-blog')
+    expect(saved.frontier.some((entry: { nodeId: string }) => entry.nodeId === 'launch-blog')).toBe(false)
+    expect(await screen.findByRole('heading', { name: 'Understand & Express', level: 1 })).toBeVisible()
+    expect(window.location.hash).toBe('#/goal/understand')
+  })
+
+  it('deletes a queued goal from the overview and stays there', async () => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Theology / Scripture' }))
+    expect(screen.getByRole('dialog', { name: 'Delete goal' })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
+    expect(mocks.saveMap.mock.calls[0][0].nodes['theology-scripture']).toBeUndefined()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete goal' })).not.toBeInTheDocument())
+    expect(screen.getByRole('heading', { name: 'Active Frontier' })).toBeVisible()
+    expect(window.location.hash).toBe('')
+  })
+
+  it('keeps the delete dialog open and reports a failed delete', async () => {
+    mocks.saveMap.mockRejectedValueOnce(new Error('Network unavailable'))
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Software / AI Engineering' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Network unavailable')
+    expect(screen.getByRole('dialog', { name: 'Delete goal' })).toBeVisible()
+  })
+
   it('adds a new goal to the Queue under a chosen direction in one save', async () => {
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))

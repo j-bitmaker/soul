@@ -2,13 +2,14 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { User } from 'firebase/auth'
 import { CompassView } from './components/CompassView'
 import { GoalEditor, type GoalEditorValues } from './components/GoalEditor'
+import { DeleteDialog } from './components/DeleteDialog'
 import { LabelEditor } from './components/LabelEditor'
 import { MergeDialog } from './components/MergeDialog'
 import {
   firebaseConfigured, isOwner, saveMap, signInOwner, signOutOwner, subscribeToMap, subscribeToOwner,
 } from './data/firebase'
-import { addGoal, archiveGoal, mergeGoals, moveGoal, placeInFrontier, queueGoal, reorderGoal, restoreGoal,
-  setSecondaryLinks, toggleVisibleChild } from './domain/map'
+import { addGoal, archiveGoal, deleteGoal, mergeGoals, moveGoal, placeInFrontier, queueGoal, reorderGoal, restoreGoal,
+  setSecondaryLinks, subtreeIds, toggleVisibleChild } from './domain/map'
 import { createSeedMap } from './domain/seed'
 import type { GoalMap, Label } from './domain/types'
 import { exportMap, parseMap, validateMap } from './domain/validation'
@@ -97,12 +98,13 @@ export default function App() {
   const [labelEditorId, setLabelEditorId] = useState<string | null>(null)
   const [editorBaseRevision, setEditorBaseRevision] = useState<number | null>(null)
   const [mergeId, setMergeId] = useState<string | null>(null)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
   const [loginOpen, setLoginOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const canEdit = !firebaseConfigured || (isOwner(owner) && !fromCache)
   const effectiveEditMode = editMode && canEdit
-  const dialogOpen = loginOpen || (canEdit && (editorId !== undefined || labelEditorId !== null || mergeId !== null))
+  const dialogOpen = loginOpen || (canEdit && (editorId !== undefined || labelEditorId !== null || mergeId !== null || deleteId !== null))
 
   function select(id: string | null, mode: NavigationMode = 'push'): void {
     if (id === readSelection()) return
@@ -128,11 +130,11 @@ export default function App() {
       setMap(remote ?? createSeedMap())
       setFromCache(cached)
       setLoading(false)
-      if (cached) { setEditMode(false); setEditorId(undefined); setLabelEditorId(null); setMergeId(null) }
+      if (cached) { setEditMode(false); setEditorId(undefined); setLabelEditorId(null); setMergeId(null); setDeleteId(null) }
     }, (cause) => { setError(cause.message); setLoading(false) })
     const unsubscribeOwner = subscribeToOwner((user) => {
       setOwner(user)
-      if (!isOwner(user)) { setEditMode(false); setEditorId(undefined); setLabelEditorId(null); setMergeId(null) }
+      if (!isOwner(user)) { setEditMode(false); setEditorId(undefined); setLabelEditorId(null); setMergeId(null); setDeleteId(null) }
     })
     return () => { unsubscribeMap(); unsubscribeOwner() }
   }, [])
@@ -186,6 +188,17 @@ export default function App() {
     if (saved) setLabelEditorId(null)
   }
 
+  async function confirmDelete(): Promise<void> {
+    const id = deleteId
+    if (!id || !map.nodes[id]) return
+    const parentId = map.nodes[id].parentId
+    const viewing = selectedId !== null && subtreeIds(map, id).includes(selectedId)
+    const saved = await persist((current) => deleteGoal(current, id))
+    if (!saved) return
+    setDeleteId(null)
+    if (viewing) select(parentId, 'replace')
+  }
+
   async function importFile(file: File): Promise<void> {
     try {
       const imported = parseMap(await file.text())
@@ -237,12 +250,14 @@ export default function App() {
       }) }}
       onRestore={(id) => { void persist((current) => restoreGoal(current, id)) }}
       onToggleVisible={(parentId, childId) => { void persist((current) => toggleVisibleChild(current, parentId, childId)) }}
-      onOpenMerge={setMergeId} onExport={() => downloadMap(map)} onImport={(file) => { void importFile(file) }}
+      onOpenMerge={setMergeId} onDelete={setDeleteId} onExport={() => downloadMap(map)} onImport={(file) => { void importFile(file) }}
       onSignIn={() => { setError(''); setLoginOpen(true) }} onSignOut={() => { void signOut() }} />
     <GoalEditor map={map} node={editorId ? map.nodes[editorId] : undefined} parentId={selectedId ?? 'understand'}
       open={editorId !== undefined && canEdit} busy={busy} error={error} onClose={() => setEditorId(undefined)} onSave={(values) => { void saveEditor(values) }} />
     {labelEditorId && canEdit && map.nodes[labelEditorId] && <LabelEditor key={labelEditorId} node={map.nodes[labelEditorId]}
       busy={busy} error={error} onClose={() => setLabelEditorId(null)} onSave={(labels) => { void saveLabelEditor(labels) }} />}
+    <DeleteDialog map={map} goalId={canEdit ? deleteId : null} busy={busy} error={error} onClose={() => setDeleteId(null)}
+      onConfirm={() => { void confirmDelete() }} />
     <MergeDialog map={map} sourceId={canEdit ? mergeId : null} busy={busy} error={error} onClose={() => setMergeId(null)}
       onMerge={(targetId) => { void persist((current) => mergeGoals(current, mergeId as string, targetId)).then((saved) => {
         if (saved) { select(targetId, 'replace'); setMergeId(null) }

@@ -111,6 +111,41 @@ export function archiveGoal(map: GoalMap, id: string): GoalMap {
   }
 }
 
+/** The goal and everything nested under it, archived or not. */
+export function subtreeIds(map: GoalMap, id: string): string[] {
+  const found: string[] = []
+  const seen = new Set<string>()
+  const pending = [id]
+  while (pending.length) {
+    const current = pending.shift() as string
+    const node = map.nodes[current]
+    if (!node || seen.has(current)) continue
+    seen.add(current)
+    found.push(current)
+    pending.push(...node.childrenIds)
+  }
+  return found
+}
+
+/**
+ * Permanently removes a goal and everything nested under it, together with its place in
+ * Active or the Queue and every link to it, so nothing is left pointing at a missing goal.
+ */
+export function deleteGoal(map: GoalMap, id: string): GoalMap {
+  const node = requireGoal(map, id)
+  const doomed = new Set(subtreeIds(map, id))
+  const nodes = Object.fromEntries(Object.entries(map.nodes).filter(([key]) => !doomed.has(key)).map(([key, item]) => {
+    const secondaryIds = item.secondaryIds.filter((link) => !doomed.has(link))
+    const cleaned = secondaryIds.length === item.secondaryIds.length ? item : { ...item, secondaryIds }
+    return [key, key === node.parentId
+      ? { ...cleaned,
+        childrenIds: cleaned.childrenIds.filter((childId) => childId !== id),
+        visibleChildIds: cleaned.visibleChildIds.filter((childId) => childId !== id) }
+      : cleaned]
+  })) as Record<string, GoalNode>
+  return { ...map, nodes, frontier: normalizeFrontier(map.frontier.filter((entry) => !doomed.has(entry.nodeId))) }
+}
+
 export function restoreGoal(map: GoalMap, id: string): GoalMap {
   const node = requireGoal(map, id)
   if (!node.archived) return map

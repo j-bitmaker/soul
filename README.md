@@ -1,6 +1,6 @@
 # Soul · Mental Compass
 
-A small personal Goal Map. The overview states what Soul means, shows the three directions with their goals, and ends with the Active Frontier (up to five goals in order, the first as a lead card, each with one quiet line of orientation) and a Queue of goals waiting their turn. Goals can remain title-only or carry milestones, free-form labels (small pills), reminders, notes, and secondary links.
+A small personal Goal Map. The overview states what Soul means, shows the three directions with their goals, and ends with the Active Frontier (up to five goals in order, the first as a lead card, each with one quiet line of orientation) and a Queue of goals waiting their turn. Goals can remain title-only or carry milestones, free-form labels (small pills), reminders, notes, and secondary links. In edit mode a goal can be archived (kept, hidden) or deleted for good after a confirmation that counts what goes with it.
 
 ## Run locally
 

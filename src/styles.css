@@ -258,6 +258,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .solid-button, .subtle-button { border-radius: 11px; min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 15px; font-weight: 600; font-size: 13px; }
 .solid-button { color: #fffefa; background: var(--forest); border: 1px solid var(--forest); }
 .solid-button:hover { background: #254f43; }
+.solid-button.danger { background: #a1493c; border-color: #a1493c; }
+.solid-button.danger:hover { background: #863a2f; }
 .subtle-button { border: 1px solid var(--line); background: #fffefa; color: #4a5a50; }
 .subtle-button:hover { border-color: #afc2ae; background: #f3f6f1; }
 .solid-button svg, .subtle-button svg { width: 16px; height: 16px; }
@@ -284,6 +286,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .archived-section { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 15px; }
 .archived-section h3 { margin: 0 0 6px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .12em; }
 .archived-row { min-height: 41px; display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 13px; }
+.archived-actions { display: flex; align-items: center; gap: 14px; }
+.text-button.danger { color: #a1493c; }
+.text-button.danger:hover { color: #863a2f; }
 .annotation-grid { display: grid; gap: 20px; }
 .annotation-block { border-bottom: 1px solid var(--line); padding-bottom: 17px; }
 .annotation-label { margin: 0 0 7px; color: var(--muted); text-transform: uppercase; letter-spacing: .13em; font-size: 11px; font-weight: 700; }

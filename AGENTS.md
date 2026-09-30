@@ -20,6 +20,7 @@ This repository contains a single-user public Goal Map. Keep the product a calm 
 - Goals and directions can carry free-form labels (small pills). Routines are no longer a separate category; old data migrates into labels on load.
 - Keep optional details optional. A title is enough to create a goal.
 - Preserve data when moving, archiving, importing, or merging goals. Never silently overwrite a newer remote revision.
+- Deleting a goal is explicit, permanent, and always confirmed (prefer archiving). It removes the goal with everything nested under it, its Active or Queue entry, and every link to it, so no reference is left dangling.
 - The entire map, including notes, is publicly readable. Firebase rules must authorize writes by the owner's UID.
 - The Firestore rules accept only the top-level keys `schemaVersion`, `revision`, `nodes`, and `frontier`, and they are not deployed by CI. Keep new data inside `nodes` and `frontier` entries and never bump `schemaVersion` without deploying the rules.
 

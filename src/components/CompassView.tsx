@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { ArrowDown, ArrowRight, ArrowUp, ChevronRight, Compass, Download, Ellipsis, Eye, EyeOff, LogIn, LogOut, Pencil, Plus, Tag, Upload, X } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUp, ChevronRight, Compass, Download, Ellipsis, Eye, EyeOff, LogIn, LogOut, Pencil, Plus, Tag, Trash2, Upload, X } from 'lucide-react'
 import type { FrontierLane, GoalMap, GoalNode, Label } from '../domain/types'
 import { CLUSTER_IDS, MAX_ACTIVE, ROOT_ID } from '../domain/types'
 
@@ -21,6 +21,7 @@ export interface CompassViewProps {
   onArchive: (id: string) => void
   onRestore: (id: string) => void
   onOpenMerge: (id: string) => void
+  onDelete: (id: string) => void
   onExport: () => void
   onImport: (file: File) => void
   onSignIn: () => void
@@ -151,6 +152,8 @@ function LaneMoves({ props, id, lane, index, count }: { props: CompassViewProps;
       disabled={index === 0 || props.busy} onClick={() => props.onPlace(id, lane, index - 1)}><ArrowUp aria-hidden="true" /></button>
     <button className="icon-button" title="Move down" aria-label={`Move ${props.map.nodes[id].title} down in ${lane === 'active' ? 'Active' : 'the Queue'}`}
       disabled={index === count - 1 || props.busy} onClick={() => props.onPlace(id, lane, index + 1)}><ArrowDown aria-hidden="true" /></button>
+    <button className="icon-button danger" title="Delete" aria-label={`Delete ${props.map.nodes[id].title}`}
+      disabled={props.busy} onClick={() => props.onDelete(id)}><Trash2 aria-hidden="true" /></button>
   </div>
 }
 
@@ -324,7 +327,7 @@ function ChildList({ props, node }: { props: CompassViewProps; node: GoalNode })
     {!children.length && <p className="empty-note">Nothing here yet. A single meaningful goal is enough.</p>}
     {!props.editMode && children.length > node.visibleChildIds.length && <div className="list-footer"><button className="text-button" onClick={() => { setShowAll(!showAll); setPage(0) }}>{showAll ? 'Show less' : `All goals (${children.length})`} <ArrowRight aria-hidden="true" /></button></div>}
     {allMode && <PageControls page={currentPage} total={totalPages} label="goal" onPage={setPage} />}
-    {props.editMode && archived.length > 0 && <div className="archived-section"><h3>Archived</h3>{archived.slice(currentArchivedPage * 5, currentArchivedPage * 5 + 5).map((child) => <div className="archived-row" key={child.id}><span>{child.title}</span><button className="text-button" onClick={() => props.onRestore(child.id)}>Restore</button></div>)}<PageControls page={currentArchivedPage} total={totalArchivedPages} label="archived" onPage={setArchivedPage} /></div>}
+    {props.editMode && archived.length > 0 && <div className="archived-section"><h3>Archived</h3>{archived.slice(currentArchivedPage * 5, currentArchivedPage * 5 + 5).map((child) => <div className="archived-row" key={child.id}><span>{child.title}</span><span className="archived-actions"><button className="text-button" onClick={() => props.onRestore(child.id)}>Restore</button><button className="text-button danger" aria-label={`Delete ${child.title}`} onClick={() => props.onDelete(child.id)}>Delete</button></span></div>)}<PageControls page={currentArchivedPage} total={totalArchivedPages} label="archived" onPage={setArchivedPage} /></div>}
     {props.editMode && <div className="list-footer"><button className="text-button" onClick={() => props.onOpenEditor()}><Plus aria-hidden="true" /> Add goal</button></div>}
   </section>
 }
@@ -371,6 +374,7 @@ function Focus({ props, node }: { props: CompassViewProps; node: GoalNode }) {
         </select>}
         {!isProtected && <button className="subtle-button" onClick={() => props.onOpenMerge(node.id)}>Merge</button>}
         {!isProtected && <button className="subtle-button danger" onClick={() => props.onArchive(node.id)}>Archive</button>}
+        {!isProtected && <button className="subtle-button danger" onClick={() => props.onDelete(node.id)}><Trash2 aria-hidden="true" /> Delete</button>}
       </div>}
     </div>
     <div className={`focus-layout${isLeaf && !props.editMode ? ' leaf' : ''}`}><ChildList key={node.id} props={props} node={node} /><Annotations node={node} /></div>

@@ -114,3 +114,22 @@ test('opens a goal from a link and starts each page at the top', async ({ page }
   await expect(page.getByRole('heading', { name: 'Philosophy / humanities', level: 1 })).toBeVisible()
   expect(await page.evaluate(() => window.scrollY)).toBe(0)
 })
+
+test('adds a goal to the queue and deletes it explicitly', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  await page.getByLabel('Add to the queue').fill('A goal to remove')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  const row = page.locator('.queue-section .frontier-row', { hasText: 'A goal to remove' })
+  await expect(row).toBeVisible()
+
+  await page.getByRole('button', { name: 'Delete A goal to remove' }).click()
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(row).toBeVisible()
+
+  await page.getByRole('button', { name: 'Delete A goal to remove' }).click()
+  await expect(page.getByRole('dialog', { name: 'Delete goal' })).toContainText('cannot be undone')
+  await page.getByRole('button', { name: 'Delete permanently' }).click()
+  await expect(row).toHaveCount(0)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
