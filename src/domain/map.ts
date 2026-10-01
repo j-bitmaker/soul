@@ -1,4 +1,4 @@
-import { normalizeFrontier, placeEntry, type WhenFull } from './frontier'
+import { activeIds, normalizeFrontier, placeEntry, queuedIds, type WhenFull } from './frontier'
 import { CLUSTER_IDS, ROOT_ID, type FrontierLane, type GoalMap, type GoalNode, type Label, type Milestone } from './types'
 
 function requireNode(map: GoalMap, id: string): GoalNode {
@@ -137,7 +137,10 @@ const TEXT_FIELDS = ['description', 'current', 'target', 'note'] as const
  */
 export function setNodeDetails(map: GoalMap, id: string, details: NodeDetails): GoalMap {
   const node = requireNode(map, id)
-  if (id === ROOT_ID) throw new Error('Soul is permanent')
+  // Soul keeps its name and meaning; its labels are the one thing the owner may change.
+  if (id === ROOT_ID && Object.entries(details).some(([key, value]) => key !== 'labels' && value !== undefined)) {
+    throw new Error('Soul is permanent')
+  }
   const { labels, milestones, reminders, description, current, target, note, ...rest } = node
   const next: GoalNode = { ...rest }
   if (details.title !== undefined) {
@@ -239,6 +242,50 @@ export function reorderGoal(map: GoalMap, id: string, direction: -1 | 1): GoalMa
     ? parent.visibleChildIds.map((childId) => childId === id ? siblingId : childId === siblingId ? id : childId)
     : parent.visibleChildIds
   return replaceNode(map, { ...parent, childrenIds, visibleChildIds })
+}
+
+/**
+ * The goals a goal is ordered against: its siblings with the same standing, in that standing's order. Active and
+ * queued goals follow their lane (the order of the frontier); the others follow the order within their parent.
+ */
+function peersOf(map: GoalMap, id: string): { lane: FrontierLane | null; peers: string[] } {
+  const node = requireGoal(map, id)
+  const parent = requireNode(map, node.parentId as string)
+  const lane: FrontierLane | null = (() => {
+    const entry = map.frontier.find((item) => item.nodeId === id)
+    return entry ? (entry.status === 'queued' ? 'queue' : 'active') : null
+  })()
+  const siblings = new Set(parent.childrenIds.filter((childId) => map.nodes[childId] && !map.nodes[childId].archived))
+  const peers = lane === 'active' ? activeIds(map.frontier).filter((other) => siblings.has(other))
+    : lane === 'queue' ? queuedIds(map.frontier).filter((other) => siblings.has(other))
+      : parent.childrenIds.filter((other) => siblings.has(other) && !map.frontier.some((item) => item.nodeId === other))
+  return { lane, peers }
+}
+
+/** Is there a neighbour with the same standing on that side? */
+export function canShiftGoal(map: GoalMap, id: string, direction: -1 | 1): boolean {
+  const { peers } = peersOf(map, id)
+  const at = peers.indexOf(id)
+  return at >= 0 && at + direction >= 0 && at + direction < peers.length
+}
+
+/**
+ * Moves a goal one place up (-1) or down (1) among the goals of its parent that share its standing: goals in
+ * focus among goals in focus, queued among queued, the rest among the rest. Nothing happens at either end.
+ */
+export function shiftGoal(map: GoalMap, id: string, direction: -1 | 1): GoalMap {
+  if (!canShiftGoal(map, id, direction)) return map
+  const { lane, peers } = peersOf(map, id)
+  const neighbour = peers[peers.indexOf(id) + direction]
+  if (lane) {
+    const order = lane === 'active' ? activeIds(map.frontier) : queuedIds(map.frontier)
+    return placeInFrontier(map, id, lane, order.indexOf(neighbour))
+  }
+  const parent = requireNode(map, requireGoal(map, id).parentId as string)
+  const childrenIds = parent.childrenIds.filter((childId) => childId !== id)
+  // the neighbour's old position is the goal's new one, whichever way it moves
+  childrenIds.splice(parent.childrenIds.indexOf(neighbour), 0, id)
+  return replaceNode(map, { ...parent, childrenIds })
 }
 
 function mergedNote(source: GoalNode, target: GoalNode): string {

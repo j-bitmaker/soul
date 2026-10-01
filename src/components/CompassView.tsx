@@ -2,24 +2,24 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, ChevronRight, Compass, Download, Ellipsis, LogIn, LogOut, Pencil, Trash2, Upload, X } from 'lucide-react'
 import type { FrontierLane, GoalMap, GoalNode } from '../domain/types'
 import { CLUSTER_IDS, MAX_ACTIVE, ROOT_ID } from '../domain/types'
-import type { NodeDetails } from '../domain/map'
+import { canShiftGoal, type NodeDetails } from '../domain/map'
 import { LabelPills, laneOf, nearestCluster, pathTo, toneById } from './goalView'
 import { EditableLabels, InlineAdd, InlineText } from './InlineEdit'
+import { PriorityMenu, type PriorityChoice } from './PriorityMenu'
 import { DirectionsSwitch, OrbitView, readDirectionsView, writeDirectionsView, type DirectionsView } from './OrbitView'
 
 export interface CompassViewProps {
   map: GoalMap
   selectedId: string | null
-  editMode: boolean
   canEdit: boolean
   authEnabled?: boolean
   busy?: boolean
   onSelect: (id: string | null) => void
-  onToggleEdit: () => void
   onOpenEditor: (id?: string) => void
   onEditNode: (id: string, details: NodeDetails) => Promise<boolean> | void
   onAddGoal: (parentId: string, title: string) => Promise<boolean>
   onPlace: (id: string, lane: FrontierLane | null, index?: number, whenFull?: 'bump' | 'reject') => Promise<boolean> | void
+  onShift: (id: string, direction: -1 | 1) => Promise<boolean> | void
   onArchive: (id: string) => void
   onRestore: (id: string) => void
   onOpenMerge: (id: string) => void
@@ -61,10 +61,6 @@ function Header(props: CompassViewProps) {
       <Compass className="brand-mark" aria-hidden="true" /> Soul
     </button>
     <div className="header-controls">
-      {props.canEdit && <button className={`header-action${props.editMode ? ' is-active' : ''}`} onClick={props.onToggleEdit} aria-label={props.editMode ? 'Done' : 'Edit'} aria-pressed={props.editMode}>
-        {props.editMode ? <X aria-hidden="true" /> : <Pencil aria-hidden="true" />}
-        <span>{props.editMode ? 'Done' : 'Edit'}</span>
-      </button>}
       <button className="header-action" onClick={() => setMenuOpen(!menuOpen)} aria-label="More options" aria-expanded={menuOpen}>
         <Ellipsis aria-hidden="true" />
       </button>
@@ -101,15 +97,27 @@ function ClusterCard({ node, props }: { node: GoalNode; props: CompassViewProps 
   // The overview shows what is in play: queued goals wait on the direction's own page and in the Queue below.
   const goals = children.filter((goal) => laneOf(map, goal.id) !== 'queue')
   const owner = canEdit
+  const focusFull = map.frontier.filter((entry) => entry.status !== 'queued').length >= MAX_ACTIVE
+  function reprioritise(id: string, choice: PriorityChoice): void {
+    if (choice === 'focus') void props.onPlace(id, 'active')
+    else if (choice === 'unfocus') void props.onPlace(id, null)
+    else if (choice === 'queue') void props.onPlace(id, 'queue')
+    else void props.onShift(id, choice === 'up' ? -1 : 1)
+  }
   return <article className="cluster-card" data-tone={toneById[node.id]}>
     <h3 className="cluster-title"><button className="cluster-open" onClick={() => props.onSelect(node.id)}>
       <span>{node.title}</span><ArrowRight className="cluster-arrow" aria-hidden="true" />
     </button></h3>
     {node.description && <p className="cluster-description">{node.description}</p>}
-    {goals.length ? <ul className="cluster-goals" aria-label={`Goals in ${node.title}`}>{goals.map((goal) =>
+    {goals.length ? <ul className={`cluster-goals${owner ? ' owner' : ''}`} aria-label={`Goals in ${node.title}`}>{goals.map((goal) =>
       <li key={goal.id}><button className="cluster-goal" onClick={() => props.onSelect(goal.id)}>
-        <span>{goal.title}</span>{laneOf(map, goal.id) === 'active' && <span className="lane-mark" data-lane="active"><span className="visually-hidden">In focus</span></span>}
+        <span>{goal.title}</span>{!owner && laneOf(map, goal.id) === 'active' && <span className="lane-mark" data-lane="active"><span className="visually-hidden">In focus</span></span>}
       </button>
+      {owner && <PriorityMenu title={goal.title} lane={laneOf(map, goal.id)} limit={MAX_ACTIVE} disabled={props.busy}
+        canUp={canShiftGoal(map, goal.id, -1)} canDown={canShiftGoal(map, goal.id, 1)}
+        full={focusFull && laneOf(map, goal.id) !== 'active'} onChoose={(choice) => reprioritise(goal.id, choice)} />}
+      {owner && <button type="button" className="row-remove cluster-goal-delete" title="Delete" aria-label={`Delete ${goal.title}`}
+        disabled={props.busy} onClick={() => props.onDelete(goal.id)}><Trash2 aria-hidden="true" /></button>}
       {(owner || goal.labels?.length) ? <Labels props={props} node={goal} className="cluster-goal-labels" compact /> : null}
       </li>)}</ul> : <p className="cluster-empty">{children.length ? 'Nothing active right now' : 'No goals yet'}</p>}
     {(owner || node.labels?.length) ? <div className="cluster-foot">
@@ -142,6 +150,7 @@ function Overview({ props }: { props: CompassViewProps }) {
       <div className="eyebrow">A mental compass</div>
       <h1 className="soul-title" id="soul-title">Soul</h1>
       <p className="soul-subtitle">{soul?.description || 'The orientation above every goal.'}</p>
+      {soul && (props.canEdit || soul.labels?.length) ? <Labels props={props} node={soul} className="soul-labels" /> : null}
       <CompassMark />
     </section>
     <section className="directions-section" aria-labelledby="directions-title">
@@ -268,15 +277,15 @@ function Focus({ props, node }: { props: CompassViewProps; node: GoalNode }) {
       <div className="focus-meta">{props.canEdit && node.id !== ROOT_ID
         ? <EditableLabels labels={node.labels ?? []} disabled={props.busy} onChange={(labels) => props.onEditNode(node.id, { labels })} />
         : <LabelPills labels={node.labels} />}{cluster && !isProtected && <button className="relation-chip" onClick={() => props.onSelect(cluster.id)}>{cluster.title}</button>}{secondary.map((item) => <button className="relation-chip secondary" onClick={() => props.onSelect(item.id)} key={item.id}>Also {item.title}</button>)}</div>
-      {props.editMode && <div className="focus-actions">
-        {!isProtected && <button className="subtle-button" onClick={() => props.onOpenEditor(node.id)}><Pencil aria-hidden="true" /> Edit goal</button>}
-        {!isProtected && <select aria-label="Priority" value={lane ?? ''} onChange={(event) => props.onPlace(node.id, (event.target.value || null) as FrontierLane | null)}>
+      {ownGoal && <div className="focus-actions">
+        <button className="subtle-button" onClick={() => props.onOpenEditor(node.id)}><Pencil aria-hidden="true" /> Edit goal</button>
+        <select aria-label="Priority" value={lane ?? ''} onChange={(event) => props.onPlace(node.id, (event.target.value || null) as FrontierLane | null)}>
           <option value="">Not prioritised</option><option value="queue">Queue</option>
           <option value="active" disabled={activeFull && lane !== 'active'}>{activeFull && lane !== 'active' ? 'Active (full)' : 'Active'}</option>
-        </select>}
-        {!isProtected && <button className="subtle-button" onClick={() => props.onOpenMerge(node.id)}>Merge</button>}
-        {!isProtected && <button className="subtle-button danger" onClick={() => props.onArchive(node.id)}>Archive</button>}
-        {!isProtected && <button className="subtle-button danger" onClick={() => props.onDelete(node.id)}><Trash2 aria-hidden="true" /> Delete</button>}
+        </select>
+        <button className="subtle-button" onClick={() => props.onOpenMerge(node.id)}>Merge</button>
+        <button className="subtle-button danger" onClick={() => props.onArchive(node.id)}>Archive</button>
+        <button className="subtle-button danger" onClick={() => props.onDelete(node.id)}><Trash2 aria-hidden="true" /> Delete</button>
       </div>}
     </div>
     <div className={`focus-layout${isLeaf && !props.canEdit ? ' leaf' : ''}`}><ChildList key={node.id} props={props} node={node} /><Annotations props={props} node={node} /></div>
