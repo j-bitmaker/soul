@@ -4,7 +4,7 @@ import type { GoalMap, GoalNode } from '../domain/types'
 import { CLUSTER_IDS, WARMTH_MAX } from '../domain/types'
 import { toneById } from './goalView'
 import { ORBIT, orbitLayout, type OrbitLink } from './orbitGeometry'
-import { byWarmth, useStacked, warmthColor, warmthVars, warmthWord } from './warmth'
+import { byWarmth, needsAttention, useStacked, warmthColor, warmthVars, warmthWord } from './warmth'
 import { WarmthMeter } from './WarmthMeter'
 
 export type DirectionsView = 'cards' | 'orbit'
@@ -107,7 +107,7 @@ export function OrbitView({ map, onSelect, canEdit = false, busy, onWarmth }: {
       </button>
     })}
     {directions.map((node) => node.warmth !== undefined &&
-      <span key={node.id} id={`orbit-warmth-${node.id}`} className="visually-hidden">Warmth {node.warmth} of {WARMTH_MAX}, {warmthWord(node.warmth)}</span>)}
+      <span key={node.id} id={`orbit-warmth-${node.id}`} className="visually-hidden">Warmth {node.warmth} of {WARMTH_MAX}, {warmthWord(node.warmth)}{needsAttention(node.warmth) ? ', needs attention' : ''}</span>)}
     <p className="visually-hidden">Soul holds the three directions. Each direction leads to the next: Understand, Create, Self-Mastery, and back again.</p>
   </div>
   {showPanel && <div className="orbit-warmth">

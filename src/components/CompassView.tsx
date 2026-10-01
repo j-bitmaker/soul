@@ -151,7 +151,7 @@ function Overview({ props }: { props: CompassViewProps }) {
   const soul = props.map.nodes[ROOT_ID]
   const [view, setView] = useState<DirectionsView>(readDirectionsView)
   const stacked = useStacked()
-  // In one column the cooler directions come first and the hottest last; side by side they keep their places.
+  // In one column the colder directions (the ones that need attention) come first and the warmest last; side by side they keep their places.
   const inOrder = CLUSTER_IDS.map((id) => props.map.nodes[id]).filter((node): node is GoalNode => Boolean(node))
   const directions = stacked ? byWarmth(inOrder) : inOrder
   function changeView(next: DirectionsView): void {
