@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createSeedMap } from './domain/seed'
 import App from './App'
+import { warmthColor } from './components/warmth'
 
 const mocks = vi.hoisted(() => ({
   saveMap: vi.fn(),
@@ -412,6 +413,42 @@ describe('Soul compass', () => {
     expect(saved.nodes.soul.title).toBe('Soul')
     expect(saved.nodes.soul.childrenIds).toEqual(['understand', 'create', 'mastery'])
     expect(await screen.findByText('Seek first')).toBeVisible()
+  })
+
+  it('saves a direction\'s warmth with one tap and recolours its card, and clears it with a second tap', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Soul' })
+    const card = () => document.querySelector('.cluster-card[data-tone="freedom"]') as HTMLElement
+    expect(card()).not.toHaveAttribute('data-warm')
+    fireEvent.click(within(card()).getByRole('radio', { name: '8, Hot' }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
+    const saved = mocks.saveMap.mock.calls[0][0]
+    expect(saved.nodes.create.warmth).toBe(8)
+    expect(saved.nodes.create.title).toBe('Practical Agency')
+    expect(saved.nodes.understand.warmth).toBeUndefined()
+    await waitFor(() => expect(card()).toHaveAttribute('data-warm'))
+    expect(card().style.getPropertyValue('--tone')).toBe(warmthColor(8))
+    expect(within(card()).getByRole('radio', { name: '8, Hot' })).toBeChecked()
+
+    fireEvent.click(within(card()).getByRole('radio', { name: '8, Hot' }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(2))
+    expect('warmth' in mocks.saveMap.mock.calls[1][0].nodes.create).toBe(false)
+    await waitFor(() => expect(card()).not.toHaveAttribute('data-warm'))
+  })
+
+  it('reorders the stacked directions as the values change, hottest last', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Soul' })
+    const titles = () => [...document.querySelectorAll('.cluster-open')].map((button) => button.textContent)
+    expect(titles()).toEqual(['Understand & Express', 'Practical Agency', 'Self-Mastery'])
+    fireEvent.click(within(document.querySelector('.cluster-card[data-tone="expression"]') as HTMLElement).getByRole('radio', { name: '10, Burning' }))
+    await waitFor(() => expect(titles()).toEqual(['Practical Agency', 'Self-Mastery', 'Understand & Express']))
+    fireEvent.click(within(document.querySelector('.cluster-card[data-tone="mastery"]') as HTMLElement).getByRole('radio', { name: '10, Burning' }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(2))
+    // equal values keep the order the directions have side by side
+    await waitFor(() => expect(titles()).toEqual(['Practical Agency', 'Understand & Express', 'Self-Mastery']))
+    vi.unstubAllGlobals()
   })
 
   it('rejects a stale editor draft after a remote map revision arrives', async () => {

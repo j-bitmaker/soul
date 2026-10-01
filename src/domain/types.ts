@@ -4,6 +4,8 @@ export type FrontierStatus = 'active' | 'queued'
 export type FrontierLane = 'active' | 'queue'
 
 export const MAX_ACTIVE = 5
+/** How much a direction asks for attention: a whole number from 0 (cold) to this value (hottest). */
+export const WARMTH_MAX = 10
 
 export interface Milestone {
   id: string
@@ -32,6 +34,8 @@ export interface GoalNode {
   reminders?: string[]
   note?: string
   archived?: boolean
+  /** Directions only: 0 (cold) to 10 (hottest), how much the direction needs attention now. */
+  warmth?: number
 }
 
 export interface FrontierEntry {

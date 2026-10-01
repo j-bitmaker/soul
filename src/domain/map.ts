@@ -1,5 +1,5 @@
 import { activeIds, normalizeFrontier, placeEntry, queuedIds, type WhenFull } from './frontier'
-import { CLUSTER_IDS, ROOT_ID, type FrontierLane, type GoalMap, type GoalNode, type Label, type Milestone } from './types'
+import { CLUSTER_IDS, ROOT_ID, WARMTH_MAX, type FrontierLane, type GoalMap, type GoalNode, type Label, type Milestone } from './types'
 
 function requireNode(map: GoalMap, id: string): GoalNode {
   const node = map.nodes[id]
@@ -116,6 +116,8 @@ export interface NodeDetails {
   labels?: Label[]
   milestones?: Milestone[]
   reminders?: string[]
+  /** Directions only: 0 to 10, or null to clear it. */
+  warmth?: number | null
 }
 
 function unique<T>(items: readonly T[], key: (item: T) => string): T[] {
@@ -148,6 +150,12 @@ export function setNodeDetails(map: GoalMap, id: string, details: NodeDetails): 
     const title = details.title.trim()
     if (!title) throw new Error('Title is required')
     next.title = title
+  }
+  if (details.warmth !== undefined) {
+    if (!CLUSTER_IDS.includes(id as typeof CLUSTER_IDS[number])) throw new Error('Only directions have warmth')
+    if (details.warmth === null) delete next.warmth
+    else if (Number.isInteger(details.warmth) && details.warmth >= 0 && details.warmth <= WARMTH_MAX) next.warmth = details.warmth
+    else throw new Error(`Warmth is a whole number from 0 to ${WARMTH_MAX}`)
   }
   const before = { description, current, target, note }
   for (const field of TEXT_FIELDS) {

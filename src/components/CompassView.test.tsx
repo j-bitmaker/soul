@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createSeedMap } from '../domain/seed'
 import type { GoalMap } from '../domain/types'
 import { CompassView, type CompassViewProps } from './CompassView'
+import { warmthColor } from './warmth'
 
 function props(map: GoalMap = createSeedMap()): CompassViewProps {
   return {
@@ -188,6 +189,87 @@ describe('CompassView', () => {
     expect(screen.queryByRole('button', { name: /^(Edit|Done)$/ })).not.toBeInTheDocument()
     for (const name of ['Edit goal', 'Merge', 'Archive', 'Delete']) expect(screen.getByRole('button', { name })).toBeVisible()
     expect(screen.getByLabelText('Priority')).toBeVisible()
+  })
+
+  it('gives a direction with a warmth value its palette, and leaves the others as they were', () => {
+    const map = structuredClone(createSeedMap())
+    map.nodes.create.warmth = 9
+    render(<CompassView {...props(map)} canEdit={false} />)
+    const hot = document.querySelector('.cluster-card[data-tone="freedom"]') as HTMLElement
+    const plain = document.querySelector('.cluster-card[data-tone="expression"]') as HTMLElement
+    expect(hot).toHaveAttribute('data-warm')
+    expect(hot.style.getPropertyValue('--tone')).toBe(warmthColor(9))
+    expect(hot.style.getPropertyValue('--heat')).toBe('0.90')
+    expect(hot.style.getPropertyValue('--tone-glow')).toContain('rgba(')
+    expect(plain).not.toHaveAttribute('data-warm')
+    expect(plain.style.getPropertyValue('--tone')).toBe('')
+    // visitors see the value as a picture with a text alternative, and nothing for a direction with no value
+    expect(within(hot).getByRole('img', { name: 'Warmth of Practical Agency: 9 of 10, Hot' })).toBeVisible()
+    expect(within(plain).queryByRole('img')).not.toBeInTheDocument()
+    expect(screen.queryAllByRole('radio')).toHaveLength(0)
+  })
+
+  it('lets the owner set the warmth of a direction with one tap on its card, and clear it', () => {
+    const map = structuredClone(createSeedMap())
+    map.nodes.mastery.warmth = 3
+    const view = props(map)
+    render(<CompassView {...view} />)
+    const mastery = document.querySelector('.cluster-card[data-tone="mastery"]') as HTMLElement
+    const understand = document.querySelector('.cluster-card[data-tone="expression"]') as HTMLElement
+    expect(within(mastery).getByRole('radio', { name: '3, Cool' })).toBeChecked()
+    fireEvent.click(within(mastery).getByRole('radio', { name: '8, Hot' }))
+    expect(view.onEditNode).toHaveBeenLastCalledWith('mastery', { warmth: 8 })
+    fireEvent.click(within(mastery).getByRole('radio', { name: '3, Cool' }))
+    expect(view.onEditNode).toHaveBeenLastCalledWith('mastery', { warmth: null })
+    expect(within(understand).getByText('Not set')).toBeVisible()
+    fireEvent.click(within(understand).getByRole('radio', { name: '0, Cold' }))
+    expect(view.onEditNode).toHaveBeenLastCalledWith('understand', { warmth: 0 })
+    expect(screen.getAllByRole('group', { name: /Warmth of/ })).toHaveLength(3)
+  })
+
+  it('stacks the directions cooler first and the hottest last in one column, and keeps their places side by side', () => {
+    const map = structuredClone(createSeedMap())
+    map.nodes.understand.warmth = 9
+    map.nodes.create.warmth = 1
+    map.nodes.mastery.warmth = 5
+    const titles = () => [...document.querySelectorAll('.cluster-open')].map((button) => button.textContent)
+    const query = (matches: boolean) => vi.stubGlobal('matchMedia', vi.fn(() => ({ matches, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    query(true)
+    const stacked = render(<CompassView {...props(map)} />)
+    expect(titles()).toEqual(['Practical Agency', 'Self-Mastery', 'Understand & Express'])
+    stacked.unmount()
+    query(false)
+    render(<CompassView {...props(map)} />)
+    expect(titles()).toEqual(['Understand & Express', 'Practical Agency', 'Self-Mastery'])
+    vi.unstubAllGlobals()
+  })
+
+  it('keeps the usual order in one column while no direction has a value', () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    render(<CompassView {...props()} />)
+    expect([...document.querySelectorAll('.cluster-open')].map((button) => button.textContent))
+      .toEqual(['Understand & Express', 'Practical Agency', 'Self-Mastery'])
+    vi.unstubAllGlobals()
+  })
+
+  it('carries a direction\'s palette onto its page and its goals\' pages, and puts the meter on the direction page', () => {
+    const map = structuredClone(createSeedMap())
+    map.nodes.create.warmth = 6
+    const view = props(map)
+    const rendered = render(<CompassView {...view} selectedId="create" />)
+    const page = document.querySelector('main.page') as HTMLElement
+    expect(page.style.getPropertyValue('--tone')).toBe(warmthColor(6))
+    expect(document.querySelector('.focus-kicker')).not.toHaveAttribute('data-tone')
+    expect(document.querySelector('.content-section')).not.toHaveAttribute('data-tone')
+    fireEvent.click(within(page).getByRole('radio', { name: '10, Burning' }))
+    expect(view.onEditNode).toHaveBeenLastCalledWith('create', { warmth: 10 })
+    rendered.rerender(<CompassView {...view} selectedId="professional-autonomy" />)
+    expect((document.querySelector('main.page') as HTMLElement).style.getPropertyValue('--tone')).toBe(warmthColor(6))
+    expect(screen.queryAllByRole('radio')).toHaveLength(0) // goals have no warmth of their own
+    rendered.rerender(<CompassView {...view} selectedId="understand" canEdit={false} />)
+    expect(document.querySelector('.focus-kicker')).toHaveAttribute('data-tone', 'expression')
+    expect((document.querySelector('main.page') as HTMLElement).style.getPropertyValue('--tone')).toBe('')
+    expect(screen.queryByRole('img', { name: /Warmth of/ })).not.toBeInTheDocument()
   })
 
   it('says so when every goal of a direction is queued', () => {
