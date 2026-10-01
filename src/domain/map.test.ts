@@ -154,6 +154,34 @@ describe('goal map', () => {
     expect(() => exportMap(shiftGoal(createSeedMap(), 'english-c1', -1))).not.toThrow()
   })
 
+  it('sets, changes, and clears the warmth of a direction without touching anything else', () => {
+    const base = createSeedMap()
+    let map = setNodeDetails(base, 'create', { warmth: 7 })
+    expect(map.nodes.create.warmth).toBe(7)
+    expect(map.nodes.create.title).toBe(base.nodes.create.title)
+    expect(map.nodes.create.description).toBe(base.nodes.create.description)
+    expect(map.nodes.create.childrenIds).toEqual(base.nodes.create.childrenIds)
+    expect(() => exportMap(map)).not.toThrow()
+    map = setNodeDetails(map, 'create', { labels: [{ id: 'one', text: 'Now' }] })
+    expect(map.nodes.create.warmth).toBe(7)
+    map = setNodeDetails(map, 'create', { warmth: 0 })
+    expect(map.nodes.create.warmth).toBe(0)
+    expect(setNodeDetails(map, 'create', { warmth: 10 }).nodes.create.warmth).toBe(10)
+    map = setNodeDetails(map, 'create', { warmth: null })
+    expect('warmth' in map.nodes.create).toBe(false)
+    expect(map.nodes.create.labels).toEqual([{ id: 'one', text: 'Now' }])
+    expect(base.nodes.create.warmth).toBeUndefined()
+  })
+
+  it('refuses warmth anywhere but on a direction, and any value but a whole number from 0 to 10', () => {
+    const map = createSeedMap()
+    expect(() => setNodeDetails(map, 'launch-blog', { warmth: 5 })).toThrow(/only directions/i)
+    expect(() => setNodeDetails(map, 'soul', { warmth: 5 })).toThrow(/permanent/i)
+    for (const warmth of [11, -1, 2.5, Number.NaN, Infinity]) {
+      expect(() => setNodeDetails(map, 'mastery', { warmth })).toThrow(/whole number from 0 to 10/i)
+    }
+  })
+
   it('lets Soul carry labels but nothing else', () => {
     const labels = [{ id: 'one', text: '  Seek first  ' }, { id: 'two', text: 'Daily' }]
     const map = setNodeDetails(createSeedMap(), 'soul', { labels })

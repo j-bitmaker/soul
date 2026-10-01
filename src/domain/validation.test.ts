@@ -79,6 +79,28 @@ describe('map import and export', () => {
     ])
   })
 
+  it('accepts a warmth of 0 to 10 on a direction and keeps it through export and import', () => {
+    for (const warmth of [0, 6, 10]) {
+      const map = createSeedMap()
+      map.nodes.mastery.warmth = warmth
+      expect(parseMap(exportMap(map)).nodes.mastery.warmth).toBe(warmth)
+    }
+    expect(parseMap(exportMap(createSeedMap())).nodes.mastery.warmth).toBeUndefined()
+  })
+
+  it('rejects a warmth that is not a whole number from 0 to 10, or sits on anything but a direction', () => {
+    for (const warmth of [11, -1, 3.5, '5', null, Number.NaN]) {
+      const map = createSeedMap() as unknown as { nodes: Record<string, Record<string, unknown>> }
+      map.nodes.create.warmth = warmth
+      expect(() => parseMap(JSON.stringify(map))).toThrow(/warmth|field/i)
+    }
+    for (const id of ['soul', 'launch-blog']) {
+      const map = createSeedMap() as unknown as { nodes: Record<string, Record<string, unknown>> }
+      map.nodes[id].warmth = 5
+      expect(() => parseMap(JSON.stringify(map))).toThrow(/warmth/i)
+    }
+  })
+
   it('shows the renamed second direction, but only over its old default title', () => {
     const old = createSeedMap()
     old.nodes.create.title = 'Create & Be Free'

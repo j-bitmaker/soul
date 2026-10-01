@@ -6,6 +6,8 @@ import { canShiftGoal, type NodeDetails } from '../domain/map'
 import { LabelPills, laneOf, nearestCluster, pathTo, toneById } from './goalView'
 import { EditableLabels, InlineAdd, InlineText } from './InlineEdit'
 import { PriorityMenu, type PriorityChoice } from './PriorityMenu'
+import { byWarmth, useStacked, warmthVars } from './warmth'
+import { WarmthMeter } from './WarmthMeter'
 import { DirectionsSwitch, OrbitView, readDirectionsView, writeDirectionsView, type DirectionsView } from './OrbitView'
 
 export interface CompassViewProps {
@@ -28,6 +30,11 @@ export interface CompassViewProps {
   onImport: (file: File) => void
   onSignIn: () => void
   onSignOut: () => void
+}
+
+/** A direction's own colour, unless it has a warmth value: then its warmth palette applies instead. */
+function toneOf(cluster: GoalNode | undefined): string | undefined {
+  return cluster && cluster.warmth === undefined ? toneById[cluster.id] : undefined
 }
 
 function activeChildren(map: GoalMap, id: string): GoalNode[] {
@@ -104,11 +111,13 @@ function ClusterCard({ node, props }: { node: GoalNode; props: CompassViewProps 
     else if (choice === 'queue') void props.onPlace(id, 'queue')
     else void props.onShift(id, choice === 'up' ? -1 : 1)
   }
-  return <article className="cluster-card" data-tone={toneById[node.id]}>
+  return <article className="cluster-card" data-tone={toneById[node.id]} data-warm={node.warmth === undefined ? undefined : ''} style={warmthVars(node.warmth)}>
     <h3 className="cluster-title"><button className="cluster-open" onClick={() => props.onSelect(node.id)}>
       <span>{node.title}</span><ArrowRight className="cluster-arrow" aria-hidden="true" />
     </button></h3>
     {node.description && <p className="cluster-description">{node.description}</p>}
+    <WarmthMeter title={node.title} value={node.warmth} editable={owner} disabled={props.busy}
+      onChange={(warmth) => props.onEditNode(node.id, { warmth })} />
     {goals.length ? <ul className={`cluster-goals${owner ? ' owner' : ''}`} aria-label={`Goals in ${node.title}`}>{goals.map((goal) =>
       <li key={goal.id}><button className="cluster-goal" onClick={() => props.onSelect(goal.id)}>
         <span>{goal.title}</span>{!owner && laneOf(map, goal.id) === 'active' && <span className="lane-mark" data-lane="active"><span className="visually-hidden">In focus</span></span>}
@@ -141,6 +150,10 @@ function CompassMark() {
 function Overview({ props }: { props: CompassViewProps }) {
   const soul = props.map.nodes[ROOT_ID]
   const [view, setView] = useState<DirectionsView>(readDirectionsView)
+  const stacked = useStacked()
+  // In one column the cooler directions come first and the hottest last; side by side they keep their places.
+  const inOrder = CLUSTER_IDS.map((id) => props.map.nodes[id]).filter((node): node is GoalNode => Boolean(node))
+  const directions = stacked ? byWarmth(inOrder) : inOrder
   function changeView(next: DirectionsView): void {
     setView(next)
     writeDirectionsView(next)
@@ -156,11 +169,9 @@ function Overview({ props }: { props: CompassViewProps }) {
     <section className="directions-section" aria-labelledby="directions-title">
       <div className="section-heading"><h2 id="directions-title">Three directions</h2><DirectionsSwitch view={view} onChange={changeView} /></div>
       {view === 'orbit'
-        ? <OrbitView map={props.map} onSelect={props.onSelect} />
-        : <div className="cluster-grid">{CLUSTER_IDS.map((id) => {
-          const node = props.map.nodes[id]
-          return node && <ClusterCard key={id} node={node} props={props} />
-        })}</div>}
+        ? <OrbitView map={props.map} onSelect={props.onSelect} canEdit={props.canEdit} busy={props.busy}
+          onWarmth={(id, warmth) => props.onEditNode(id, { warmth })} />
+        : <div className="cluster-grid">{directions.map((node) => <ClusterCard key={node.id} node={node} props={props} />)}</div>}
     </section>
     <p className="footer-note">See clearly. Choose one thing. Begin.</p>
   </main>
@@ -190,12 +201,13 @@ function GoalRow({ props, child }: { props: CompassViewProps; child: GoalNode })
 /** All goals of a page in one scrolling list: Active and the rest first, the Queue below them, the Archive last. */
 function ChildList({ props, node }: { props: CompassViewProps; node: GoalNode }) {
   const owner = props.canEdit
+  const cluster = nearestCluster(props.map, node.id)
   const children = priorityChildren(props.map, node.id)
   const main = children.filter((child) => laneOf(props.map, child.id) !== 'queue')
   const queued = children.filter((child) => laneOf(props.map, child.id) === 'queue')
   const archived = node.childrenIds.map((id) => props.map.nodes[id]).filter((child): child is GoalNode => Boolean(child?.archived))
   if (!children.length && !owner) return null
-  return <section className="content-section" aria-labelledby="goals-title" data-tone={toneById[nearestCluster(props.map, node.id)?.id ?? '']}>
+  return <section className="content-section" aria-labelledby="goals-title" data-tone={toneOf(cluster)}>
     <h2 id="goals-title">{node.id === ROOT_ID ? 'Directions' : 'Goals'}</h2>
     {main.length > 0 && <div className="goal-list">{main.map((child) => <GoalRow key={child.id} props={props} child={child} />)}</div>}
     {!children.length && <p className="empty-note">Nothing here yet. A single meaningful goal is enough.</p>}
@@ -264,16 +276,18 @@ function Focus({ props, node }: { props: CompassViewProps; node: GoalNode }) {
   const isProtected = node.id === ROOT_ID || CLUSTER_IDS.includes(node.id as typeof CLUSTER_IDS[number])
   const isLeaf = activeChildren(props.map, node.id).length === 0
   const ownGoal = props.canEdit && !isProtected
-  return <main className="page" id="main-content">
+  return <main className="page" id="main-content" style={warmthVars(cluster?.warmth)}>
     <Breadcrumb map={props.map} node={node} onSelect={props.onSelect} />
     <div className="focus-header">
-      <div className="focus-kicker" data-tone={toneById[cluster?.id ?? 'understand']}><span className="alive-dot" /><span className="eyebrow">{isProtected ? 'Direction' : 'Goal in focus'}</span></div>
+      <div className="focus-kicker" data-tone={toneOf(cluster) ?? (cluster ? undefined : toneById.understand)}><span className="alive-dot" /><span className="eyebrow">{isProtected ? 'Direction' : 'Goal in focus'}</span></div>
       <h1 className="detail-title">{ownGoal
         ? <InlineText editable required label="name" placeholder="Name" value={node.title} onSave={(title) => props.onEditNode(node.id, { title })} />
         : node.title}</h1>
       {(node.description || ownGoal) && <p className="detail-description">{ownGoal
         ? <InlineText editable multiline label="meaning" placeholder="Add a meaning: why this matters" value={node.description ?? ''} onSave={(description) => props.onEditNode(node.id, { description })} />
         : node.description}</p>}
+      {cluster?.id === node.id && <div className="focus-warmth"><WarmthMeter title={node.title} value={node.warmth} editable={props.canEdit} disabled={props.busy}
+        onChange={(warmth) => props.onEditNode(node.id, { warmth })} /></div>}
       <div className="focus-meta">{props.canEdit && node.id !== ROOT_ID
         ? <EditableLabels labels={node.labels ?? []} disabled={props.busy} onChange={(labels) => props.onEditNode(node.id, { labels })} />
         : <LabelPills labels={node.labels} />}{cluster && !isProtected && <button className="relation-chip" onClick={() => props.onSelect(cluster.id)}>{cluster.title}</button>}{secondary.map((item) => <button className="relation-chip secondary" onClick={() => props.onSelect(item.id)} key={item.id}>Also {item.title}</button>)}</div>

@@ -1,7 +1,14 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createSeedMap } from '../domain/seed'
 import { DirectionsSwitch, OrbitView, readDirectionsView, writeDirectionsView } from './OrbitView'
+import { warmthColor } from './warmth'
+
+/** jsdom hands colours back as rgb(); compare in that form. */
+const hex = (colour: string): string => {
+  const [red, green, blue] = [1, 3, 5].map((at) => parseInt(colour.slice(at, at + 2), 16))
+  return `rgb(${red}, ${green}, ${blue})`
+}
 
 afterEach(() => {
   window.localStorage.clear()
@@ -108,4 +115,70 @@ describe('OrbitView', () => {
     render(<OrbitView map={map} onSelect={vi.fn()} />)
     expect(screen.getAllByRole('button')).toHaveLength(2)
   })
+
+describe('OrbitView and warmth', () => {
+  const warm = () => {
+    const map = createSeedMap()
+    map.nodes.understand.warmth = 2
+    map.nodes.create.warmth = 9
+    return map
+  }
+
+  it('colours a direction by its warmth, shows the value on it, and describes it without changing its name', () => {
+    render(<OrbitView map={warm()} onSelect={vi.fn()} />)
+    const hot = screen.getByRole('button', { name: 'Practical Agency' })
+    expect(hot).toHaveAttribute('data-warm')
+    expect(hot.style.getPropertyValue('--tone')).toBe(warmthColor(9))
+    expect(hot.querySelector('.orbit-heat')).toHaveTextContent('9')
+    expect(hot).toHaveAccessibleDescription('Warmth 9 of 10, Hot')
+    const plain = screen.getByRole('button', { name: 'Self-Mastery' })
+    expect(plain).not.toHaveAttribute('data-warm')
+    expect(plain.querySelector('.orbit-heat')).toBeNull()
+    expect(plain).not.toHaveAttribute('aria-describedby')
+  })
+
+  it('draws the arrows in the directions\' warmth colours, and in their own colours until there is a value', () => {
+    render(<OrbitView map={warm()} onSelect={vi.fn()} />)
+    const stops = [...document.querySelectorAll<SVGStopElement>('linearGradient stop')].map((stop) => stop.style.stopColor)
+    // understand -> create, create -> mastery, mastery -> understand
+    expect(stops).toEqual([hex(warmthColor(2)), hex(warmthColor(9)), hex(warmthColor(9)), 'var(--gold)', 'var(--gold)', hex(warmthColor(2))])
+    const heads = [...document.querySelectorAll<SVGPathElement>('marker:not(#orbit-arrow-muted) .orbit-head')].map((head) => head.style.stroke)
+    expect(heads).toEqual([hex(warmthColor(2)), hex(warmthColor(9)), 'var(--gold)'])
+    for (const arc of document.querySelectorAll('.orbit-arc')) expect(arc.getAttribute('marker-end')).toMatch(/^url\(#orbit-arrow-[012]\)$/)
+  })
+
+  it('lists every direction\'s warmth under the diagram, and lets the owner set it there', () => {
+    const onWarmth = vi.fn()
+    const rendered = render(<OrbitView map={warm()} onSelect={vi.fn()} canEdit onWarmth={onWarmth} />)
+    const panel = document.querySelector('.orbit-warmth') as HTMLElement
+    expect(panel.querySelectorAll('.orbit-warmth-row')).toHaveLength(3)
+    const row = (title: string) => within([...panel.querySelectorAll<HTMLElement>('.orbit-warmth-row')].find((item) => item.textContent?.startsWith(title)) as HTMLElement)
+    expect(row('Practical Agency').getByRole('radio', { name: '9, Hot' })).toBeChecked()
+    fireEvent.click(row('Self-Mastery').getByRole('radio', { name: '5, Steady' }))
+    expect(onWarmth).toHaveBeenLastCalledWith('mastery', 5)
+    fireEvent.click(row('Practical Agency').getByRole('radio', { name: '9, Hot' }))
+    expect(onWarmth).toHaveBeenLastCalledWith('create', null)
+    // the panel is all there is to the owner's controls: the diagram itself still has its three buttons
+    expect(screen.getAllByRole('button')).toHaveLength(3)
+    rendered.rerender(<OrbitView map={warm()} onSelect={vi.fn()} />)
+    expect(within(panel).queryAllByRole('radio')).toHaveLength(0)
+    expect(within(panel).getByRole('img', { name: 'Warmth of Practical Agency: 9 of 10, Hot' })).toBeVisible()
+    expect(within(panel).queryByRole('img', { name: /Self-Mastery/ })).not.toBeInTheDocument()
+  })
+
+  it('shows visitors no panel when no direction has a value, and the owner an empty one to fill', () => {
+    const rendered = render(<OrbitView map={createSeedMap()} onSelect={vi.fn()} />)
+    expect(document.querySelector('.orbit-warmth')).toBeNull()
+    rendered.rerender(<OrbitView map={createSeedMap()} onSelect={vi.fn()} canEdit />)
+    expect(document.querySelectorAll('.orbit-warmth .warmth-name')).toHaveLength(3)
+  })
+
+  it('lists the panel cooler first in one column', () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    render(<OrbitView map={warm()} onSelect={vi.fn()} canEdit />)
+    expect([...document.querySelectorAll('.orbit-warmth-title')].map((title) => title.textContent))
+      .toEqual(['Self-Mastery', 'Understand & Express', 'Practical Agency'])
+    vi.unstubAllGlobals()
+  })
+})
 })
