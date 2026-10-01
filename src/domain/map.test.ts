@@ -10,7 +10,6 @@ import {
   mergeGoals,
   moveGoal,
   placeInFrontier,
-  queueGoal,
   reorderGoal,
   restoreGoal,
   setSecondaryLinks,
@@ -80,14 +79,6 @@ describe('goal map', () => {
     expect(() => placeInFrontier(archived, 'own-products', 'queue')).toThrow(/archived/i)
     expect(() => placeInFrontier(createSeedMap(), 'create', 'active')).toThrow(/permanent/i)
     expect(() => placeInFrontier(createSeedMap(), 'soul', 'queue')).toThrow(/permanent/i)
-  })
-
-  it('queues a new title-only goal under a direction in one step', () => {
-    const map = queueGoal(createSeedMap(), { id: 'read-more', title: '  Read more  ', parentId: 'create' })
-    expect(map.nodes['read-more'].title).toBe('Read more')
-    expect(map.nodes.create.childrenIds).toContain('read-more')
-    expect(queuedIds(map.frontier).at(-1)).toBe('read-more')
-    expect(() => exportMap(map)).not.toThrow()
   })
 
   it('keeps any sequence of operations valid', () => {

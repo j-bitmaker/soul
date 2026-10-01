@@ -1,24 +1,10 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
-
-async function drag(page: Page, from: Locator, to: Locator): Promise<void> {
-  const start = (await from.boundingBox())!
-  const end = (await to.boundingBox())!
-  await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2)
-  await page.mouse.down()
-  await page.mouse.move(start.x + start.width / 2 + 12, start.y + start.height / 2 + 12, { steps: 4 })
-  await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2, { steps: 14 })
-  await page.mouse.up()
-}
-
-const savedFrontier = (page: Page) => page.evaluate(() =>
-  (JSON.parse(localStorage.getItem('soul-compass-preview') as string).frontier as { nodeId: string; status: string }[])
-    .map((entry) => `${entry.nodeId}:${entry.status}`))
+import { expect, test } from '@playwright/test'
 
 test('overview, focus, edit, export, and offline revisit', async ({ page, context }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Soul' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Active Frontier' })).toBeVisible()
-  await expect(page.locator('.frontier-lead')).toContainText('Professional autonomy')
+  await expect(page.getByRole('heading', { name: 'Three directions' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Active Frontier|Queue/ })).toHaveCount(0)
 
   await page.locator('.cluster-open', { hasText: 'Create & Be Free' }).click()
   await page.getByRole('button', { name: /Professional autonomy/ }).click()
@@ -75,16 +61,12 @@ test('uses modern type and gives each direction room at narrow widths', async ({
   }
 
   await page.setViewportSize({ width: 320, height: 700 })
-  expect(await page.getByRole('heading', { name: 'Active Frontier' }).count()).toBe(1)
   expect(await page.getByText('In focus now').count()).toBe(0)
-  const ordering = await page.evaluate(() => {
-    const directions = document.querySelector('.cluster-grid')
-    const frontier = document.querySelector('.frontier-section')
-    return Boolean(directions && frontier && directions.compareDocumentPosition(frontier) & Node.DOCUMENT_POSITION_FOLLOWING)
-  })
-  expect(ordering).toBe(true)
+  await expect(page.getByRole('heading', { name: /Active Frontier|Queue/ })).toHaveCount(0)
   await expect(page.locator('.cluster-card').first().locator('.cluster-labels')).toContainText('Read Bible · Daily')
-  await expect(page.locator('.queue-section')).toContainText('Theology / Scripture')
+  // goals that wait in the Queue are not on the overview; active ones are
+  await expect(page.locator('.cluster-card').first()).not.toContainText('Theology / Scripture')
+  await expect(page.locator('.cluster-card').first().locator('.cluster-goal', { hasText: 'Launch Blog' })).toBeVisible()
   expect(await page.locator('.frontier-status').count()).toBe(0)
 })
 
@@ -93,7 +75,7 @@ test('shows what Soul means and the Primary goal without overflow on desktop and
   for (const [width, height] of [[1440, 900], [1280, 720], [390, 844]]) {
     await page.setViewportSize({ width, height })
     await page.goto('/')
-    await expect(page.locator('.frontier-lead')).toContainText('Professional autonomy')
+    await expect(page.locator('.cluster-card').first()).toBeVisible()
     await expect(page.getByText('Unity with God. Life in the Holy Spirit, truth and conscience.')).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   }
@@ -109,7 +91,7 @@ test('the back gesture steps back one page instead of leaving the app', async ({
   await page.goBack()
   await expect(page.getByRole('heading', { name: 'Create & Be Free', level: 1 })).toBeVisible()
   await page.goBack()
-  await expect(page.getByRole('heading', { name: 'Active Frontier' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Three directions' })).toBeVisible()
   expect(page.url()).toMatch(/\/soul\/$/)
 
   await page.goForward()
@@ -121,7 +103,7 @@ test('opens a goal from a link and starts each page at the top', async ({ page }
   await expect(page.getByRole('heading', { name: 'Launch Blog', level: 1 })).toBeVisible()
 
   await page.goto('/')
-  await expect(page.getByRole('heading', { name: 'Active Frontier' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Three directions' })).toBeVisible()
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
   expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
   await page.locator('.cluster-goal', { hasText: 'Philosophy / humanities' }).click()
@@ -129,85 +111,70 @@ test('opens a goal from a link and starts each page at the top', async ({ page }
   expect(await page.evaluate(() => window.scrollY)).toBe(0)
 })
 
-test('adds a goal to the queue and deletes it explicitly', async ({ page }) => {
+test('adds a goal right on a direction card and deletes it explicitly', async ({ page }) => {
   await page.goto('/')
+  const card = page.locator('.cluster-card[data-tone="freedom"]')
+  await card.getByLabel('New goal in Create & Be Free').fill('A goal to remove')
+  await card.getByRole('button', { name: 'Add goal to Create & Be Free' }).click()
+  const goal = card.getByRole('button', { name: /^A goal to remove/ })
+  await expect(goal).toBeVisible()
+
+  await goal.click()
   await page.getByRole('button', { name: 'Edit', exact: true }).click()
-  await page.getByLabel('Add to the queue').fill('A goal to remove')
-  await page.getByRole('button', { name: 'Add', exact: true }).click()
-  const row = page.locator('.queue-section .frontier-row', { hasText: 'A goal to remove' })
-  await expect(row).toBeVisible()
-
-  await page.getByRole('button', { name: 'Delete A goal to remove' }).click()
+  await page.getByRole('button', { name: 'Delete', exact: true }).click()
   await page.getByRole('button', { name: 'Cancel' }).click()
-  await expect(row).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'A goal to remove', level: 1 })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Delete A goal to remove' }).click()
+  await page.getByRole('button', { name: 'Delete', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Delete goal' })).toContainText('cannot be undone')
   await page.getByRole('button', { name: 'Delete permanently' }).click()
-  await expect(row).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Create & Be Free', level: 1 })).toBeVisible()
   await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /A goal to remove/ })).toHaveCount(0)
 })
 
-test('drags goals between Active and the Queue and reorders them', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name === 'mobile', 'Mouse dragging is checked on desktop; touch needs a real device')
-  await page.setViewportSize({ width: 1280, height: 1800 })
+test('shows and edits labels right on the overview, and keeps them across a reload', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('button', { name: 'Drag Launch Blog' })).toBeVisible()
+  const card = page.locator('.cluster-card[data-tone="expression"]')
+  await expect(card.locator('.cluster-labels')).toContainText('Read Bible · Daily')
 
-  // Active -> Queue, in front of the goal it is dropped on
-  await drag(page, page.getByRole('button', { name: 'Drag Launch Blog' }), page.locator('.queue-section .frontier-row', { hasText: 'Theology / Scripture' }))
-  await expect(page.locator('.queue-section .frontier-open').first()).toContainText('Launch Blog')
-  expect(await savedFrontier(page)).toEqual([
-    'professional-autonomy:active', 'english-c1:active', 'launch-blog:queued', 'theology-scripture:queued', 'software-ai:queued',
-  ])
+  await card.getByRole('button', { name: 'Add label to Clear speech / writing' }).click()
+  await page.getByRole('textbox', { name: 'New label for Clear speech / writing' }).fill('Speak aloud · Daily')
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Escape')
+  await expect(card.locator('.cluster-goals li', { hasText: 'Clear speech / writing' }).locator('.label-pill')).toContainText('Speak aloud · Daily')
 
-  // Queue -> top of Active: it becomes the lead card
-  await drag(page, page.getByRole('button', { name: 'Drag Software / AI Engineering' }), page.locator('.frontier-lead-wrap'))
-  await expect(page.locator('.frontier-lead')).toContainText('Software / AI Engineering')
-  expect(await savedFrontier(page)).toEqual([
-    'software-ai:active', 'professional-autonomy:active', 'english-c1:active', 'launch-blog:queued', 'theology-scripture:queued',
-  ])
+  await page.reload()
+  await expect(card.locator('.cluster-goals li', { hasText: 'Clear speech / writing' }).locator('.label-pill')).toContainText('Speak aloud · Daily')
 
-  // Within Active: swap the lead with the goal below it
-  await drag(page, page.getByRole('button', { name: 'Drag Software / AI Engineering' }), page.locator('.frontier-list .frontier-row', { hasText: 'English C1' }))
-  expect((await savedFrontier(page))[0]).toBe('professional-autonomy:active')
-  await expect(page.locator('.frontier-lead')).toContainText('Professional autonomy')
+  await card.getByRole('button', { name: 'Edit label Speak aloud · Daily of Clear speech / writing' }).click()
+  await page.getByRole('textbox', { name: 'Rename label Speak aloud · Daily of Clear speech / writing' }).fill('Speak aloud · Weekly')
+  await page.keyboard.press('Enter')
+  await expect(card.locator('.label-pill', { hasText: 'Speak aloud · Weekly' })).toBeVisible()
+  await card.getByRole('button', { name: 'Remove label Speak aloud · Weekly from Clear speech / writing' }).click()
+  await expect(card.locator('.label-pill', { hasText: 'Speak aloud' })).toHaveCount(0)
+
+  await card.getByRole('button', { name: 'Remove label Read Bible · Daily from Understand & Express' }).click()
+  await expect(card.locator('.cluster-labels .label-pill')).toHaveCount(0)
+  await card.getByRole('button', { name: 'Add label to Understand & Express' }).click()
+  await page.getByRole('textbox', { name: 'New label for Understand & Express' }).fill('Pray daily')
+  await page.keyboard.press('Enter')
+  await expect(card.locator('.cluster-labels .label-pill', { hasText: 'Pray daily' })).toBeVisible()
 })
 
-test('keeps the Frontier inside the screen on phones, also in edit mode', async ({ page }, testInfo) => {
+test('keeps the overview inside the screen on phones, with the owner\'s small controls and an open label field', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === 'mobile', 'This test sets its own viewports')
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 800 })
     await page.goto('/')
-    await expect(page.locator('.frontier-lead')).toBeVisible()
+    await expect(page.locator('.cluster-card').first()).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.getByRole('button', { name: 'Add label to Launch Blog' }).click()
+    await expect(page.getByRole('textbox', { name: 'New label for Launch Blog' })).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     await page.getByRole('button', { name: 'Edit', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Move Launch Blog down in Active' })).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   }
-})
-
-test('drags a goal with a finger: press the handle, then move', async ({ page, context }, testInfo) => {
-  test.skip(testInfo.project.name !== 'mobile', 'Touch dragging is emulated on the phone project')
-  await page.setViewportSize({ width: 412, height: 2600 })
-  await page.goto('/')
-  const client = await context.newCDPSession(page)
-  const centre = async (locator: Locator) => { const box = (await locator.boundingBox())!; return { x: box.x + box.width / 2, y: box.y + box.height / 2 } }
-  const from = await centre(page.getByRole('button', { name: 'Drag Launch Blog' }))
-  const to = await centre(page.locator('.queue-section .frontier-row', { hasText: 'Theology / Scripture' }))
-  const touch = (type: string, point?: { x: number; y: number }) =>
-    client.send('Input.dispatchTouchEvent', { type, touchPoints: point ? [point] : [] } as never)
-  await touch('touchStart', from)
-  await page.waitForTimeout(260)
-  for (let step = 1; step <= 16; step += 1) {
-    await touch('touchMove', { x: from.x + (to.x - from.x) * step / 16, y: from.y + (to.y - from.y) * step / 16 })
-    await page.waitForTimeout(16)
-  }
-  await touch('touchEnd')
-  await expect(page.locator('.queue-section .frontier-open').first()).toContainText('Launch Blog')
-  expect(await savedFrontier(page)).toEqual([
-    'professional-autonomy:active', 'english-c1:active', 'launch-blog:queued', 'theology-scripture:queued', 'software-ai:queued',
-  ])
 })
 
 test('edits a goal in place without edit mode: name, labels, milestones, and a new goal', async ({ page }) => {

@@ -63,10 +63,6 @@ export function placeInFrontier(map: GoalMap, id: string, lane: FrontierLane | n
   return { ...map, frontier: placeEntry(map.frontier, id, lane, index, whenFull) }
 }
 
-export function queueGoal(map: GoalMap, input: { id: string; title: string; parentId: string }): GoalMap {
-  return placeInFrontier(addGoal(map, input), input.id, 'queue')
-}
-
 export function moveGoal(map: GoalMap, id: string, parentId: string): GoalMap {
   const node = requireGoal(map, id)
   const destination = requireNode(map, parentId)

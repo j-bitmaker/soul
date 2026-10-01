@@ -3,7 +3,6 @@ import { ArrowRight, ChevronRight, Compass, Download, Ellipsis, LogIn, LogOut, P
 import type { FrontierLane, GoalMap, GoalNode } from '../domain/types'
 import { CLUSTER_IDS, MAX_ACTIVE, ROOT_ID } from '../domain/types'
 import type { NodeDetails } from '../domain/map'
-import { Frontier } from './FrontierBoard'
 import { LabelPills, laneOf, nearestCluster, pathTo, toneById } from './goalView'
 import { EditableLabels, InlineAdd, InlineText } from './InlineEdit'
 import { DirectionsSwitch, OrbitView, readDirectionsView, writeDirectionsView, type DirectionsView } from './OrbitView'
@@ -21,7 +20,6 @@ export interface CompassViewProps {
   onEditNode: (id: string, details: NodeDetails) => Promise<boolean> | void
   onAddGoal: (parentId: string, title: string) => Promise<boolean>
   onPlace: (id: string, lane: FrontierLane | null, index?: number, whenFull?: 'bump' | 'reject') => Promise<boolean> | void
-  onAddToQueue: (title: string, parentId: string) => Promise<boolean>
   onArchive: (id: string) => void
   onRestore: (id: string) => void
   onOpenMerge: (id: string) => void
@@ -88,18 +86,37 @@ function Header(props: CompassViewProps) {
   </header>
 }
 
-function ClusterCard({ node, map, onSelect }: { node: GoalNode; map: GoalMap; onSelect: (id: string) => void }) {
-  const goals = priorityChildren(map, node.id)
+/** A goal's or direction's labels: editable where they stand for the owner, plain pills for everyone else. */
+function Labels({ props, node, className = '', compact }: { props: CompassViewProps; node: GoalNode; className?: string; compact?: boolean }) {
+  return props.canEdit
+    ? <EditableLabels labels={node.labels ?? []} subject={node.title} compact={compact} disabled={props.busy}
+      className={`${className}${compact && !node.labels?.length ? ' is-empty' : ''}`.trim()}
+      onChange={(labels) => props.onEditNode(node.id, { labels })} />
+    : <LabelPills labels={node.labels} className={className} />
+}
+
+function ClusterCard({ node, props }: { node: GoalNode; props: CompassViewProps }) {
+  const { map, canEdit } = props
+  const children = priorityChildren(map, node.id)
+  // The overview shows what is in play: queued goals wait on the direction's own page and in the Queue below.
+  const goals = children.filter((goal) => laneOf(map, goal.id) !== 'queue')
+  const owner = canEdit
   return <article className="cluster-card" data-tone={toneById[node.id]}>
-    <h3 className="cluster-title"><button className="cluster-open" onClick={() => onSelect(node.id)}>
+    <h3 className="cluster-title"><button className="cluster-open" onClick={() => props.onSelect(node.id)}>
       <span>{node.title}</span><ArrowRight className="cluster-arrow" aria-hidden="true" />
     </button></h3>
     {node.description && <p className="cluster-description">{node.description}</p>}
     {goals.length ? <ul className="cluster-goals" aria-label={`Goals in ${node.title}`}>{goals.map((goal) =>
-      <li key={goal.id}><button className="cluster-goal" onClick={() => onSelect(goal.id)}>
-        <span>{goal.title}</span>{laneOf(map, goal.id) && <span className="lane-mark" data-lane={laneOf(map, goal.id)}><span className="visually-hidden">{laneOf(map, goal.id) === 'active' ? 'In focus' : 'Queued'}</span></span>}
-      </button></li>)}</ul> : <p className="cluster-empty">No goals yet</p>}
-    {node.labels?.length ? <LabelPills labels={node.labels} className="cluster-labels" /> : null}
+      <li key={goal.id}><button className="cluster-goal" onClick={() => props.onSelect(goal.id)}>
+        <span>{goal.title}</span>{laneOf(map, goal.id) === 'active' && <span className="lane-mark" data-lane="active"><span className="visually-hidden">In focus</span></span>}
+      </button>
+      {(owner || goal.labels?.length) ? <Labels props={props} node={goal} className="cluster-goal-labels" compact /> : null}
+      </li>)}</ul> : <p className="cluster-empty">{children.length ? 'Nothing active right now' : 'No goals yet'}</p>}
+    {(owner || node.labels?.length) ? <div className="cluster-foot">
+      <Labels props={props} node={node} className="cluster-labels" />
+      {owner && <InlineAdd label={`New goal in ${node.title}`} action={`Add goal to ${node.title}`} placeholder="Add a goal…" disabled={props.busy}
+        onAdd={(title) => props.onAddGoal(node.id, title)} />}
+    </div> : null}
   </article>
 }
 
@@ -133,10 +150,9 @@ function Overview({ props }: { props: CompassViewProps }) {
         ? <OrbitView map={props.map} onSelect={props.onSelect} />
         : <div className="cluster-grid">{CLUSTER_IDS.map((id) => {
           const node = props.map.nodes[id]
-          return node && <ClusterCard key={id} node={node} map={props.map} onSelect={props.onSelect} />
+          return node && <ClusterCard key={id} node={node} props={props} />
         })}</div>}
     </section>
-    <Frontier props={props} />
     <p className="footer-note">See clearly. Choose one thing. Begin.</p>
   </main>
 }
