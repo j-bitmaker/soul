@@ -61,17 +61,24 @@ function LabelInput({ initial = '', label, placeholder, onCommit, onCancel }: {
  * Labels the owner can change where they stand: tap a label to rename it, × removes it,
  * "+ Label" adds one (Enter adds and keeps the field open for the next). Every change is saved at once.
  */
-export function EditableLabels({ labels, disabled, onChange }: {
+export function EditableLabels({ labels, disabled, subject, compact, className = '', onChange }: {
   labels: Label[]
   disabled?: boolean
+  /** Whose labels these are, so that several editors on one page have distinct names for assistive technology. */
+  subject?: string
+  /** Only a small "+" instead of "+ Label", for tight places such as a goal in a card. */
+  compact?: boolean
+  className?: string
   onChange: (labels: Label[]) => Saved
 }) {
   const [renaming, setRenaming] = useState<string | null>(null)
   const [adding, setAdding] = useState<number | null>(null)
   const save = (next: Label[]) => { void onChange(next) }
-  return <span className="label-list editable">
+  const of = subject ? ` of ${subject}` : ''
+  const busy = adding !== null || renaming !== null
+  return <span className={`label-list editable${busy ? ' is-adding' : ''} ${className}`.trim()}>
     {labels.map((label) => renaming === label.id
-      ? <LabelInput key={label.id} initial={label.text} label={`Rename label ${label.text}`}
+      ? <LabelInput key={label.id} initial={label.text} label={`Rename label ${label.text}${of}`}
         onCancel={() => setRenaming(null)}
         onCommit={(text) => {
           setRenaming(null)
@@ -80,20 +87,21 @@ export function EditableLabels({ labels, disabled, onChange }: {
           save(value ? labels.map((item) => item.id === label.id ? { ...item, text: value } : item) : labels.filter((item) => item.id !== label.id))
         }} />
       : <span className="label-pill editable" key={label.id}>
-        <button type="button" className="label-text" disabled={disabled} aria-label={`Edit label ${label.text}`} onClick={() => setRenaming(label.id)}>{label.text}</button>
-        <button type="button" className="label-remove" disabled={disabled} aria-label={`Remove label ${label.text}`}
+        <button type="button" className="label-text" disabled={disabled} aria-label={`Edit label ${label.text}${of}`} onClick={() => setRenaming(label.id)}>{label.text}</button>
+        <button type="button" className="label-remove" disabled={disabled} aria-label={`Remove label ${label.text}${subject ? ` from ${subject}` : ''}`}
           onClick={() => save(labels.filter((item) => item.id !== label.id))}><X aria-hidden="true" /></button>
       </span>)}
     {adding !== null
-      ? <LabelInput key={`add-${adding}`} label="New label" placeholder="New label"
+      ? <LabelInput key={`add-${adding}`} label={subject ? `New label for ${subject}` : 'New label'} placeholder="New label"
         onCancel={() => setAdding(null)}
         onCommit={(text, more) => {
           const value = text.trim()
           if (value) save([...labels, { id: crypto.randomUUID(), text: value }])
           setAdding(more && value ? adding + 1 : null)
         }} />
-      : <button type="button" className="label-add" disabled={disabled} aria-label="Add label" onClick={() => setAdding(0)}>
-        <Plus aria-hidden="true" /> Label
+      : <button type="button" className={`label-add${compact ? ' compact' : ''}`} disabled={disabled} title="Add label"
+        aria-label={subject ? `Add label to ${subject}` : 'Add label'} onClick={() => setAdding(0)}>
+        <Plus aria-hidden="true" />{!compact && ' Label'}
       </button>}
   </span>
 }

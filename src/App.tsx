@@ -7,7 +7,7 @@ import { MergeDialog } from './components/MergeDialog'
 import {
   firebaseConfigured, isOwner, saveMap, signInOwner, signOutOwner, subscribeToMap, subscribeToOwner,
 } from './data/firebase'
-import { addGoal, archiveGoal, deleteGoal, mergeGoals, moveGoal, placeInFrontier, queueGoal, restoreGoal,
+import { addGoal, archiveGoal, deleteGoal, mergeGoals, moveGoal, placeInFrontier, restoreGoal,
   setNodeDetails, setSecondaryLinks, subtreeIds } from './domain/map'
 import { createSeedMap } from './domain/seed'
 import type { GoalMap } from './domain/types'
@@ -223,7 +223,6 @@ export default function App() {
       onEditNode={(id, details) => persist((current) => setNodeDetails(current, id, details))}
       onAddGoal={(parentId, title) => persist((current) => addGoal(current, { id: crypto.randomUUID(), title, parentId }))}
       onPlace={(id, lane, index, whenFull = 'reject') => persist((current) => placeInFrontier(current, id, lane, index, whenFull))}
-      onAddToQueue={(title, parentId) => persist((current) => queueGoal(current, { id: crypto.randomUUID(), title, parentId }))}
       onArchive={(id) => { void persist((current) => archiveGoal(current, id)).then((saved) => {
         if (saved) select(null, 'replace')
       }) }}
