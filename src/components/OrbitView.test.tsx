@@ -129,8 +129,11 @@ describe('OrbitView and warmth', () => {
     const hot = screen.getByRole('button', { name: 'Practical Agency' })
     expect(hot).toHaveAttribute('data-warm')
     expect(hot.style.getPropertyValue('--tone')).toBe(warmthColor(9))
+    expect(hot.style.getPropertyValue('--tone-shadow')).not.toContain('rgba') // very warm: no frame, no glow
+    expect(screen.getByRole('button', { name: 'Understand & Express' }).style.getPropertyValue('--tone-shadow')).toContain('0 0 0 2px') // cold: framed
     expect(hot.querySelector('.orbit-heat')).toHaveTextContent('9')
-    expect(hot).toHaveAccessibleDescription('Warmth 9 of 10, Hot')
+    expect(hot).toHaveAccessibleDescription('Warmth 9 of 10, Very Warm')
+    expect(screen.getByRole('button', { name: 'Understand & Express' })).toHaveAccessibleDescription('Warmth 2 of 10, Cold, needs attention')
     const plain = screen.getByRole('button', { name: 'Self-Mastery' })
     expect(plain).not.toHaveAttribute('data-warm')
     expect(plain.querySelector('.orbit-heat')).toBeNull()
@@ -153,16 +156,18 @@ describe('OrbitView and warmth', () => {
     const panel = document.querySelector('.orbit-warmth') as HTMLElement
     expect(panel.querySelectorAll('.orbit-warmth-row')).toHaveLength(3)
     const row = (title: string) => within([...panel.querySelectorAll<HTMLElement>('.orbit-warmth-row')].find((item) => item.textContent?.startsWith(title)) as HTMLElement)
-    expect(row('Practical Agency').getByRole('radio', { name: '9, Hot' })).toBeChecked()
-    fireEvent.click(row('Self-Mastery').getByRole('radio', { name: '5, Steady' }))
+    expect(row('Practical Agency').getByRole('radio', { name: '9, Very Warm' })).toBeChecked()
+    fireEvent.click(row('Self-Mastery').getByRole('radio', { name: '5, Alive' }))
     expect(onWarmth).toHaveBeenLastCalledWith('mastery', 5)
-    fireEvent.click(row('Practical Agency').getByRole('radio', { name: '9, Hot' }))
+    fireEvent.click(row('Practical Agency').getByRole('radio', { name: '9, Very Warm' }))
     expect(onWarmth).toHaveBeenLastCalledWith('create', null)
     // the panel is all there is to the owner's controls: the diagram itself still has its three buttons
     expect(screen.getAllByRole('button')).toHaveLength(3)
     rendered.rerender(<OrbitView map={warm()} onSelect={vi.fn()} />)
     expect(within(panel).queryAllByRole('radio')).toHaveLength(0)
-    expect(within(panel).getByRole('img', { name: 'Warmth of Practical Agency: 9 of 10, Hot' })).toBeVisible()
+    expect(within(panel).getByRole('img', { name: 'Warmth of Practical Agency: 9 of 10, Very Warm' })).toBeVisible()
+    expect(within(panel).getByRole('img', { name: 'Warmth of Understand & Express: 2 of 10, Cold, needs attention' })).toBeVisible()
+    expect(within(panel).getAllByText('Needs attention')).toHaveLength(1)
     expect(within(panel).queryByRole('img', { name: /Self-Mastery/ })).not.toBeInTheDocument()
   })
 
@@ -173,11 +178,11 @@ describe('OrbitView and warmth', () => {
     expect(document.querySelectorAll('.orbit-warmth .warmth-name')).toHaveLength(3)
   })
 
-  it('lists the panel cooler first in one column', () => {
+  it('lists the panel colder first in one column, a direction with no value counting as neutral', () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
     render(<OrbitView map={warm()} onSelect={vi.fn()} canEdit />)
     expect([...document.querySelectorAll('.orbit-warmth-title')].map((title) => title.textContent))
-      .toEqual(['Self-Mastery', 'Understand & Express', 'Practical Agency'])
+      .toEqual(['Understand & Express', 'Self-Mastery', 'Practical Agency'])
     vi.unstubAllGlobals()
   })
 })

@@ -193,18 +193,29 @@ describe('CompassView', () => {
 
   it('gives a direction with a warmth value its palette, and leaves the others as they were', () => {
     const map = structuredClone(createSeedMap())
-    map.nodes.create.warmth = 9
+    map.nodes.create.warmth = 1
+    map.nodes.mastery.warmth = 9
     render(<CompassView {...props(map)} canEdit={false} />)
-    const hot = document.querySelector('.cluster-card[data-tone="freedom"]') as HTMLElement
+    const cold = document.querySelector('.cluster-card[data-tone="freedom"]') as HTMLElement
+    const calm = document.querySelector('.cluster-card[data-tone="mastery"]') as HTMLElement
     const plain = document.querySelector('.cluster-card[data-tone="expression"]') as HTMLElement
-    expect(hot).toHaveAttribute('data-warm')
-    expect(hot.style.getPropertyValue('--tone')).toBe(warmthColor(9))
-    expect(hot.style.getPropertyValue('--heat')).toBe('0.90')
-    expect(hot.style.getPropertyValue('--tone-glow')).toContain('rgba(')
+    // the cold one is loud: its colour, a thick band, a frame and a glow, and a flag
+    expect(cold).toHaveAttribute('data-warm')
+    expect(cold.style.getPropertyValue('--tone')).toBe(warmthColor(1))
+    expect(cold.style.getPropertyValue('--tone-band')).toBe('5px')
+    expect(cold.style.getPropertyValue('--tone-shadow')).toContain('0 0 0 2px rgba(')
+    expect(within(cold).getByText('Needs attention')).toBeVisible()
+    // the very warm one is quiet: no frame, no glow, no flag
+    expect(calm).toHaveAttribute('data-warm')
+    expect(calm.style.getPropertyValue('--tone')).toBe(warmthColor(9))
+    expect(calm.style.getPropertyValue('--tone-band')).toBe('2px')
+    expect(calm.style.getPropertyValue('--tone-shadow')).not.toContain('rgba')
+    expect(within(calm).queryByText('Needs attention')).not.toBeInTheDocument()
     expect(plain).not.toHaveAttribute('data-warm')
     expect(plain.style.getPropertyValue('--tone')).toBe('')
     // visitors see the value as a picture with a text alternative, and nothing for a direction with no value
-    expect(within(hot).getByRole('img', { name: 'Warmth of Practical Agency: 9 of 10, Hot' })).toBeVisible()
+    expect(within(cold).getByRole('img', { name: 'Warmth of Practical Agency: 1 of 10, Cold, needs attention' })).toBeVisible()
+    expect(within(calm).getByRole('img', { name: 'Warmth of Self-Mastery: 9 of 10, Very Warm' })).toBeVisible()
     expect(within(plain).queryByRole('img')).not.toBeInTheDocument()
     expect(screen.queryAllByRole('radio')).toHaveLength(0)
   })
@@ -216,10 +227,10 @@ describe('CompassView', () => {
     render(<CompassView {...view} />)
     const mastery = document.querySelector('.cluster-card[data-tone="mastery"]') as HTMLElement
     const understand = document.querySelector('.cluster-card[data-tone="expression"]') as HTMLElement
-    expect(within(mastery).getByRole('radio', { name: '3, Cool' })).toBeChecked()
-    fireEvent.click(within(mastery).getByRole('radio', { name: '8, Hot' }))
+    expect(within(mastery).getByRole('radio', { name: '3, Cooling' })).toBeChecked()
+    fireEvent.click(within(mastery).getByRole('radio', { name: '8, Very Warm' }))
     expect(view.onEditNode).toHaveBeenLastCalledWith('mastery', { warmth: 8 })
-    fireEvent.click(within(mastery).getByRole('radio', { name: '3, Cool' }))
+    fireEvent.click(within(mastery).getByRole('radio', { name: '3, Cooling' }))
     expect(view.onEditNode).toHaveBeenLastCalledWith('mastery', { warmth: null })
     expect(within(understand).getByText('Not set')).toBeVisible()
     fireEvent.click(within(understand).getByRole('radio', { name: '0, Cold' }))
@@ -227,7 +238,7 @@ describe('CompassView', () => {
     expect(screen.getAllByRole('group', { name: /Warmth of/ })).toHaveLength(3)
   })
 
-  it('stacks the directions cooler first and the hottest last in one column, and keeps their places side by side', () => {
+  it('stacks the directions colder first and the warmest last in one column, and keeps their places side by side', () => {
     const map = structuredClone(createSeedMap())
     map.nodes.understand.warmth = 9
     map.nodes.create.warmth = 1
@@ -261,7 +272,7 @@ describe('CompassView', () => {
     expect(page.style.getPropertyValue('--tone')).toBe(warmthColor(6))
     expect(document.querySelector('.focus-kicker')).not.toHaveAttribute('data-tone')
     expect(document.querySelector('.content-section')).not.toHaveAttribute('data-tone')
-    fireEvent.click(within(page).getByRole('radio', { name: '10, Burning' }))
+    fireEvent.click(within(page).getByRole('radio', { name: '10, Very Warm' }))
     expect(view.onEditNode).toHaveBeenLastCalledWith('create', { warmth: 10 })
     rendered.rerender(<CompassView {...view} selectedId="professional-autonomy" />)
     expect((document.querySelector('main.page') as HTMLElement).style.getPropertyValue('--tone')).toBe(warmthColor(6))

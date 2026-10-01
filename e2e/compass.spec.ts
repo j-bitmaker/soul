@@ -431,61 +431,82 @@ test('keeps the orbit inside the screen and readable from phone to desktop', asy
 })
 
 const rgb = (hex: string): string => `rgb(${[1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)).join(', ')})`
-const WARM = { cold1: '#43709d', hot9: '#c33613', hot10: '#ca1c16', cool2: '#2f6e93' }
+const COLOURS = ['#b43127', '#b63d2b', '#b8492e', '#a75711', '#9c6911', '#606f80', '#516763', '#49695e', '#446a57', '#3c6750', '#366349']
 
-test('a direction takes on the palette of its warmth, and the hot one pulls the eye', async ({ page }) => {
+test('a direction takes on the palette of its warmth, and the cold one pulls the eye', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1000 })
   await page.goto('/')
-  const hot = page.locator('.cluster-card[data-tone="freedom"]')
-  const cool = page.locator('.cluster-card[data-tone="expression"]')
-  await expect(hot).not.toHaveAttribute('data-warm', '')
-  await expect(hot.locator('.warmth-value')).toHaveText('Not set')
+  const cold = page.locator('.cluster-card[data-tone="freedom"]')
+  const cooling = page.locator('.cluster-card[data-tone="mastery"]')
+  const calm = page.locator('.cluster-card[data-tone="expression"]')
+  await expect(cold).not.toHaveAttribute('data-warm', '')
+  await expect(cold.locator('.warmth-value')).toHaveText('Not set')
 
-  await hot.getByRole('radio', { name: '9, Hot' }).click()
-  await cool.getByRole('radio', { name: '2, Cool' }).click()
-  await expect(hot).toHaveAttribute('data-warm', '')
-  await expect(hot.locator('.warmth-value')).toHaveText('9/10 · Hot')
-  await expect(cool.locator('.warmth-value')).toHaveText('2/10 · Cool')
+  await cold.getByRole('radio', { name: '1, Cold' }).click()
+  await cooling.getByRole('radio', { name: '4, Cooling' }).click()
+  await calm.getByRole('radio', { name: '9, Very Warm' }).click()
+  await expect(cold).toHaveAttribute('data-warm', '')
+  await expect(cold.locator('.warmth-value')).toHaveText('1/10 · Cold')
+  await expect(cold.locator('.warmth-flag')).toHaveText('Needs attention')
+  await expect(cooling.locator('.warmth-value')).toHaveText('4/10 · Cooling')
+  await expect(calm.locator('.warmth-value')).toHaveText('9/10 · Very Warm')
+  await expect(page.locator('.warmth-flag')).toHaveCount(1) // only the cold one is flagged
   await page.mouse.move(2, 2)
   await page.waitForTimeout(600) // let the colours settle
 
-  const look = (card: typeof hot) => card.evaluate((element) => {
+  const look = (card: typeof cold) => card.evaluate((element) => {
     const style = getComputedStyle(element)
-    return { top: style.borderTopColor, width: parseFloat(style.borderTopWidth), shadow: style.boxShadow, background: style.backgroundColor }
+    return { top: style.borderTopColor, side: style.borderLeftColor, band: parseFloat(style.borderTopWidth), shadow: style.boxShadow, background: style.backgroundColor }
   })
-  const hotLook = await look(hot)
-  const coolLook = await look(cool)
-  expect(hotLook.top).toBe(rgb(WARM.hot9))
-  expect(coolLook.top).toBe(rgb(WARM.cool2))
-  expect(hotLook.width).toBeGreaterThan(coolLook.width) // a thicker band on the hot one
-  expect(hotLook.shadow).toMatch(/rgba\(195, 54, 19, 0\.(2|3)\d\)/) // a glow in its own colour
-  expect(hotLook.background).not.toBe(coolLook.background)
+  const coldLook = await look(cold)
+  const coolingLook = await look(cooling)
+  const calmLook = await look(calm)
+  // cold: coral band, a thick one, a 2px frame in its own colour, a glow, a reddish tint
+  expect(coldLook.top).toBe(rgb(COLOURS[1]))
+  expect(coldLook.side).toBe(rgb(COLOURS[1]))
+  expect(coldLook.band).toBe(5)
+  expect(coldLook.shadow).toContain('rgba(182, 61, 43, 0.9) 0px 0px 0px 2px')
+  expect(coldLook.shadow).toMatch(/rgba\(182, 61, 43, 0\.\d+\) 0px 10px 30px/)
   const redness = (colour: string) => { const [red, , blue] = colour.match(/\d+/g)!.map(Number); return red - blue }
-  expect(redness(hotLook.background)).toBeGreaterThan(redness(coolLook.background))
-  // a direction with no value keeps its own colour
-  await expect(page.locator('.cluster-card[data-tone="mastery"]')).not.toHaveAttribute('data-warm', '')
-  expect(await page.locator('.cluster-card[data-tone="mastery"]').evaluate((element) => getComputedStyle(element).borderTopColor)).toBe(rgb('#86662a'))
+  expect(redness(coldLook.background)).toBeGreaterThan(redness(calmLook.background))
+  // cooling: amber, a thinner band and a firmer frame than the calm one, but not the cold one's
+  expect(coolingLook.top).toBe(rgb(COLOURS[4]))
+  expect(coolingLook.band).toBe(4)
+  expect(coolingLook.shadow).toContain('rgba(156, 105, 17, 0.45) 0px 0px 0px 1px')
+  expect(coolingLook.shadow).not.toContain('0px 10px 30px')
+  // very warm: calm green, no frame (the usual pale border), no glow, no tint
+  expect(calmLook.top).toBe(rgb(COLOURS[9]))
+  expect(calmLook.side).toBe('rgb(219, 227, 220)')
+  expect(calmLook.band).toBe(2)
+  expect(calmLook.shadow).not.toContain('60, 103, 80')
+  expect(calmLook.shadow).not.toMatch(/ [1-9]px 0px 0px|0px 0px 0px [1-9]px/) // no frame ring
+  expect(calmLook.background).toBe('rgb(255, 255, 255)')
+  // the cold band is the loudest of the three
+  expect(coldLook.band).toBeGreaterThan(coolingLook.band)
+  expect(coolingLook.band).toBeGreaterThan(calmLook.band)
 
   // it survives a reload, and the direction page carries the palette
   await page.reload()
-  await expect(hot.getByRole('radio', { name: '9, Hot' })).toBeChecked()
-  await hot.locator('.cluster-open').click()
+  await expect(cold.getByRole('radio', { name: '1, Cold' })).toBeChecked()
+  await cold.locator('.cluster-open').click()
   await expect(page.getByRole('heading', { name: 'Practical Agency', level: 1 })).toBeVisible()
-  expect(await page.locator('.focus-kicker .alive-dot').evaluate((dot) => getComputedStyle(dot).backgroundColor)).toBe(rgb(WARM.hot9))
-  await page.getByRole('radio', { name: '10, Burning' }).click()
-  await expect(page.locator('.warmth-value')).toHaveText('10/10 · Burning')
+  await expect(page.locator('.warmth-flag')).toHaveText('Needs attention')
+  expect(await page.locator('.focus-kicker .alive-dot').evaluate((dot) => getComputedStyle(dot).backgroundColor)).toBe(rgb(COLOURS[1]))
+  await page.getByRole('radio', { name: '10, Very Warm' }).click()
+  await expect(page.locator('.warmth-value')).toHaveText('10/10 · Very Warm')
+  await expect(page.locator('.warmth-flag')).toHaveCount(0)
   await page.getByRole('button', { name: /^Professional autonomy/ }).click()
-  expect(await page.locator('.focus-kicker .alive-dot').evaluate((dot) => getComputedStyle(dot).backgroundColor)).toBe(rgb(WARM.hot10))
+  expect(await page.locator('.focus-kicker .alive-dot').evaluate((dot) => getComputedStyle(dot).backgroundColor)).toBe(rgb(COLOURS[10]))
 })
 
 test('sets the warmth with the keyboard too, and clears it by tapping the chosen step', async ({ page }) => {
   await page.goto('/')
   const card = page.locator('.cluster-card[data-tone="mastery"]')
-  await card.getByRole('radio', { name: '4, Steady' }).click()
-  await expect(card.locator('.warmth-value')).toHaveText('4/10 · Steady')
-  await card.getByRole('radio', { name: '4, Steady' }).focus()
+  await card.getByRole('radio', { name: '4, Cooling' }).click()
+  await expect(card.locator('.warmth-value')).toHaveText('4/10 · Cooling')
+  await card.getByRole('radio', { name: '4, Cooling' }).focus()
   await page.keyboard.press('ArrowRight')
-  await expect(card.locator('.warmth-value')).toHaveText('5/10 · Steady')
+  await expect(card.locator('.warmth-value')).toHaveText('5/10 · Alive')
   await page.keyboard.press('ArrowRight')
   await page.keyboard.press('ArrowRight')
   await expect(card.locator('.warmth-value')).toHaveText('7/10 · Warm')
@@ -496,13 +517,13 @@ test('sets the warmth with the keyboard too, and clears it by tapping the chosen
   await expect(card.locator('.warmth-value')).toHaveText('Not set')
 })
 
-test('in one column the cooler directions come first and the hottest last; side by side they keep their places', async ({ page }) => {
+test('in one column the colder directions come first and the warmest last; side by side they keep their places', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1000 })
   await page.goto('/')
   const order = () => page.locator('.cluster-open').allInnerTexts()
-  await page.locator('.cluster-card[data-tone="expression"]').getByRole('radio', { name: '9, Hot' }).click()
+  await page.locator('.cluster-card[data-tone="expression"]').getByRole('radio', { name: '9, Very Warm' }).click()
   await page.locator('.cluster-card[data-tone="freedom"]').getByRole('radio', { name: '1, Cold' }).click()
-  await page.locator('.cluster-card[data-tone="mastery"]').getByRole('radio', { name: '5, Steady' }).click()
+  await page.locator('.cluster-card[data-tone="mastery"]').getByRole('radio', { name: '5, Alive' }).click()
   expect(await order()).toEqual(['Understand & Express', 'Practical Agency', 'Self-Mastery'])
   expect(await page.locator('.cluster-grid').evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length)).toBe(3)
 
@@ -523,19 +544,23 @@ test('shows the warmth in the Orbit too, and lets the owner set it under the dia
   const panel = page.locator('.orbit-warmth')
   await expect(panel.locator('.orbit-warmth-row')).toHaveCount(3)
   const row = (title: string) => panel.locator('.orbit-warmth-row', { hasText: title })
-  await row('Practical Agency').getByRole('radio', { name: '9, Hot' }).click()
-  await row('Self-Mastery').getByRole('radio', { name: '3, Cool' }).click()
+  await row('Practical Agency').getByRole('radio', { name: '1, Cold' }).click()
+  await row('Self-Mastery').getByRole('radio', { name: '8, Very Warm' }).click()
   const node = page.locator('.orbit-node', { hasText: 'Practical Agency' })
-  await expect(node.locator('.orbit-heat')).toHaveText('9')
+  await expect(node.locator('.orbit-heat')).toHaveText('1')
   await expect(node).toHaveAttribute('data-warm', '')
+  await expect(row('Practical Agency').locator('.warmth-flag')).toHaveText('Needs attention')
   await page.mouse.move(2, 2)
   await page.waitForTimeout(600)
-  expect(await node.evaluate((element) => getComputedStyle(element).borderTopColor)).toBe(rgb(WARM.hot9))
-  // the arrow that leaves the hot direction fades from its colour to the next direction's
+  expect(await node.evaluate((element) => getComputedStyle(element).borderTopColor)).toBe(rgb(COLOURS[1]))
+  expect(await node.evaluate((element) => getComputedStyle(element).boxShadow)).toContain('rgba(182, 61, 43, 0.9) 0px 0px 0px 2px')
+  const quiet = page.locator('.orbit-node', { hasText: 'Self-Mastery' })
+  expect(await quiet.evaluate((element) => getComputedStyle(element).boxShadow)).not.toContain('0px 0px 0px 2px')
+  // the arrow that leaves the cold direction starts in its colour
   const stop = await page.locator('linearGradient').nth(1).locator('stop').first().evaluate((element) => getComputedStyle(element).stopColor)
-  expect(stop).toBe(rgb(WARM.hot9))
-  await expect(page.getByRole('button', { name: 'Practical Agency' })).toHaveAccessibleDescription('Warmth 9 of 10, Hot')
-  await row('Practical Agency').getByRole('radio', { name: '9, Hot' }).click()
+  expect(stop).toBe(rgb(COLOURS[1]))
+  await expect(page.getByRole('button', { name: 'Practical Agency' })).toHaveAccessibleDescription('Warmth 1 of 10, Cold, needs attention')
+  await row('Practical Agency').getByRole('radio', { name: '1, Cold' }).click()
   await expect(node).not.toHaveAttribute('data-warm', '')
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 900 })
