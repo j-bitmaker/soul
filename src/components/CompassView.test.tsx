@@ -6,9 +6,9 @@ import { CompassView, type CompassViewProps } from './CompassView'
 
 function props(map: GoalMap = createSeedMap()): CompassViewProps {
   return {
-    map, selectedId: null, editMode: false, canEdit: true,
-    onSelect: vi.fn(), onToggleEdit: vi.fn(), onOpenEditor: vi.fn(),
-    onPlace: vi.fn(), onEditNode: vi.fn(async () => true), onAddGoal: vi.fn(async () => true),
+    map, selectedId: null, canEdit: true,
+    onSelect: vi.fn(), onOpenEditor: vi.fn(),
+    onPlace: vi.fn(), onShift: vi.fn(), onEditNode: vi.fn(async () => true), onAddGoal: vi.fn(async () => true),
     onArchive: vi.fn(), onRestore: vi.fn(), onOpenMerge: vi.fn(), onDelete: vi.fn(),
     onExport: vi.fn(), onImport: vi.fn(), onSignIn: vi.fn(), onSignOut: vi.fn(),
   }
@@ -51,8 +51,8 @@ describe('CompassView', () => {
     expect(screen.getByText('The orientation above every goal.')).toBeVisible()
   })
 
-  it('offers an explicit Delete on goal pages and archived rows in edit mode only', () => {
-    const view = { ...props(mapWithHiddenAndArchived()), selectedId: 'understand', editMode: true }
+  it('offers the owner an explicit Delete on goal pages and archived rows, and visitors none', () => {
+    const view = { ...props(mapWithHiddenAndArchived()), selectedId: 'understand' }
     const rendered = render(<CompassView {...view} />)
     fireEvent.click(screen.getByRole('button', { name: 'Delete Former focus' }))
     expect(view.onDelete).toHaveBeenCalledWith('old-goal')
@@ -61,15 +61,42 @@ describe('CompassView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     expect(view.onDelete).toHaveBeenCalledWith('launch-blog')
     rendered.rerender(<CompassView {...view} selectedId={null} />)
-    expect(screen.queryByRole('button', { name: /^Delete/ })).not.toBeInTheDocument()
-    rendered.rerender(<CompassView {...view} selectedId="understand" editMode={false} />)
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    rendered.rerender(<CompassView {...view} selectedId="understand" canEdit={false} />)
+    expect(screen.queryByRole('button', { name: /^Delete/ })).not.toBeInTheDocument()
+    rendered.rerender(<CompassView {...view} selectedId="launch-blog" canEdit={false} />)
+    expect(screen.queryByRole('button', { name: /^Delete/ })).not.toBeInTheDocument()
     rendered.rerender(<CompassView {...view} selectedId="create" />)
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
   })
 
-  it('marks Active goals on direction cards and leaves queued goals off the overview', () => {
-    render(<CompassView {...props()} />)
+  it('lets the owner delete a goal with one tap on its row on the overview, and shows visitors nothing', () => {
+    const view = props()
+    const rendered = render(<CompassView {...view} />)
+    const card = document.querySelector('.cluster-card[data-tone="expression"]') as HTMLElement
+    const rows = [...card.querySelectorAll('.cluster-goals li')]
+    expect(rows).toHaveLength(4)
+    for (const row of rows) expect(row.querySelectorAll('.cluster-goal-delete')).toHaveLength(1)
+    fireEvent.click(within(card).getByRole('button', { name: 'Delete Launch Blog' }))
+    expect(view.onDelete).toHaveBeenCalledWith('launch-blog')
+    fireEvent.click(within(card).getByRole('button', { name: 'Delete Philosophy / humanities' }))
+    expect(view.onDelete).toHaveBeenLastCalledWith('philosophy-humanities')
+    expect(view.onSelect).not.toHaveBeenCalled()
+    // directions themselves cannot be deleted
+    expect(screen.queryByRole('button', { name: /^Delete (Understand|Practical|Self)/ })).not.toBeInTheDocument()
+    rendered.rerender(<CompassView {...view} canEdit={false} />)
+    expect(screen.queryByRole('button', { name: /^Delete/ })).not.toBeInTheDocument()
+    expect(document.querySelector('.cluster-goals.owner')).toBeNull()
+  })
+
+  it('does not delete while a save is in progress', () => {
+    const view = { ...props(), busy: true }
+    render(<CompassView {...view} />)
+    expect(screen.getByRole('button', { name: 'Delete Launch Blog' })).toBeDisabled()
+  })
+
+  it('marks goals in focus on direction cards and leaves queued goals off the overview', () => {
+    const rendered = render(<CompassView {...props()} canEdit={false} />)
     const card = document.querySelector('.cluster-card[data-tone="expression"]') as HTMLElement
     const launch = within(card).getByRole('button', { name: /^Launch Blog/ })
     expect(launch.querySelector('.lane-mark')).toHaveAttribute('data-lane', 'active')
@@ -79,6 +106,88 @@ describe('CompassView', () => {
     expect(document.querySelector('.lane-mark[data-lane="queue"]')).toBeNull()
     expect(screen.queryByText('Theology / Scripture')).not.toBeInTheDocument()
     expect(screen.queryByText('Software / AI Engineering')).not.toBeInTheDocument()
+    // the owner gets the same marker as a button that opens the priority menu
+    rendered.rerender(<CompassView {...props()} />)
+    expect(within(card).getByRole('button', { name: 'Priority of Launch Blog' }).querySelector('.lane-mark')).toHaveAttribute('data-lane', 'active')
+    expect(within(card).getByRole('button', { name: 'Priority of Philosophy / humanities' }).querySelector('.lane-mark')).not.toHaveAttribute('data-lane')
+  })
+
+  it('lets the owner change a goal\'s priority from the menu on its row', () => {
+    const view = props()
+    render(<CompassView {...view} />)
+    const card = document.querySelector('.cluster-card[data-tone="expression"]') as HTMLElement
+    const open = (title: string) => fireEvent.click(within(card).getByRole('button', { name: `Priority of ${title}` }))
+
+    open('Clear speech / writing')
+    fireEvent.click(screen.getByRole('menuitem', { name: /Put in focus/ }))
+    expect(view.onPlace).toHaveBeenLastCalledWith('clear-speech-writing', 'active')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+
+    open('Launch Blog')
+    fireEvent.click(screen.getByRole('menuitem', { name: /Take out of focus/ }))
+    expect(view.onPlace).toHaveBeenLastCalledWith('launch-blog', null)
+
+    open('Launch Blog')
+    expect(screen.getByRole('menuitem', { name: /Move up/ })).toBeDisabled()
+    fireEvent.click(screen.getByRole('menuitem', { name: /Move down/ }))
+    expect(view.onShift).toHaveBeenLastCalledWith('launch-blog', 1)
+
+    open('English C1')
+    expect(screen.getByRole('menuitem', { name: /Move down/ })).toBeDisabled()
+    fireEvent.click(screen.getByRole('menuitem', { name: /Move up/ }))
+    expect(view.onShift).toHaveBeenLastCalledWith('english-c1', -1)
+
+    open('Philosophy / humanities')
+    fireEvent.click(screen.getByRole('menuitem', { name: /Move to the Queue/ }))
+    expect(view.onPlace).toHaveBeenLastCalledWith('philosophy-humanities', 'queue')
+    expect(view.onSelect).not.toHaveBeenCalled()
+  })
+
+  it('does not offer to put a goal in focus when focus is full, and offers visitors no menu', () => {
+    const map = structuredClone(createSeedMap())
+    map.frontier = ['professional-autonomy', 'launch-blog', 'english-c1', 'own-products', 'attention-focus']
+      .map((nodeId) => ({ nodeId, status: 'active' as const }))
+    const rendered = render(<CompassView {...props(map)} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Priority of Clear speech / writing' }))
+    expect(screen.getByRole('menuitem', { name: /Put in focus/ })).toBeDisabled()
+    expect(screen.getByRole('menuitem', { name: /Put in focus/ })).toHaveTextContent('Focus holds 5 at most')
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    rendered.rerender(<CompassView {...props(map)} canEdit={false} />)
+    expect(screen.queryByRole('button', { name: /^Priority of/ })).not.toBeInTheDocument()
+  })
+
+  it('shows Soul\'s labels as pills to visitors and lets the owner edit them in the hero', () => {
+    const map = structuredClone(createSeedMap())
+    map.nodes.soul.labels = [{ id: 'a', text: 'Seek first' }, { id: 'b', text: 'Daily' }]
+    const view = props(map)
+    const rendered = render(<CompassView {...view} canEdit={false} />)
+    const hero = document.querySelector('.orientation') as HTMLElement
+    expect(hero.querySelector('.soul-labels')).toHaveTextContent('Seek firstDaily')
+    expect(within(hero).queryByRole('button')).not.toBeInTheDocument()
+    rendered.rerender(<CompassView {...view} />)
+    fireEvent.click(within(hero).getByRole('button', { name: 'Remove label Daily from Soul' }))
+    expect(view.onEditNode).toHaveBeenLastCalledWith('soul', { labels: [{ id: 'a', text: 'Seek first' }] })
+    fireEvent.click(within(hero).getByRole('button', { name: 'Add label to Soul' }))
+    fireEvent.change(screen.getByLabelText('New label for Soul'), { target: { value: 'Begin' } })
+    fireEvent.keyDown(screen.getByLabelText('New label for Soul'), { key: 'Enter' })
+    expect(view.onEditNode).toHaveBeenLastCalledWith('soul', { labels: [
+      { id: 'a', text: 'Seek first' }, { id: 'b', text: 'Daily' }, { id: expect.any(String), text: 'Begin' },
+    ] })
+  })
+
+  it('keeps the hero quiet for visitors when Soul has no labels, and invites the owner to add one', () => {
+    const rendered = render(<CompassView {...props()} canEdit={false} />)
+    expect(document.querySelector('.soul-labels')).toBeNull()
+    rendered.rerender(<CompassView {...props()} />)
+    expect(screen.getByRole('button', { name: 'Add label to Soul' })).toBeVisible()
+  })
+
+  it('never offers an Edit switch: the owner\'s tools are simply there', () => {
+    const view = { ...props(), selectedId: 'english-c1' }
+    render(<CompassView {...view} />)
+    expect(screen.queryByRole('button', { name: /^(Edit|Done)$/ })).not.toBeInTheDocument()
+    for (const name of ['Edit goal', 'Merge', 'Archive', 'Delete']) expect(screen.getByRole('button', { name })).toBeVisible()
+    expect(screen.getByLabelText('Priority')).toBeVisible()
   })
 
   it('says so when every goal of a direction is queued', () => {
@@ -155,8 +264,8 @@ describe('CompassView', () => {
     expect(view.onDelete).toHaveBeenCalledWith('old-goal')
   })
 
-  it('changes a goal\'s priority from the goal page in edit mode', () => {
-    const view = { ...props(), selectedId: 'english-c1', editMode: true }
+  it('changes a goal\'s priority from the goal page', () => {
+    const view = { ...props(), selectedId: 'english-c1' }
     render(<CompassView {...view} />)
     expect(screen.getByLabelText('Priority')).toHaveValue('active')
     fireEvent.change(screen.getByLabelText('Priority'), { target: { value: '' } })
@@ -169,9 +278,9 @@ describe('CompassView', () => {
     const map = structuredClone(createSeedMap())
     map.frontier = ['professional-autonomy', 'launch-blog', 'english-c1', 'own-products', 'attention-focus']
       .map((nodeId) => ({ nodeId, status: 'active' as const }))
-    const rendered = render(<CompassView {...props(map)} selectedId="habits-self-control" editMode />)
+    const rendered = render(<CompassView {...props(map)} selectedId="habits-self-control" />)
     expect(screen.getByRole('option', { name: 'Active (full)' })).toBeDisabled()
-    rendered.rerender(<CompassView {...props(map)} selectedId="own-products" editMode />)
+    rendered.rerender(<CompassView {...props(map)} selectedId="own-products" />)
     expect(screen.getByRole('option', { name: 'Active' })).toBeEnabled()
   })
 
@@ -356,7 +465,7 @@ describe('CompassView', () => {
   })
 
   it('exposes goal editing, merging, archiving, relations, and return navigation', () => {
-    const view = { ...props(), selectedId: 'english-c1', editMode: true }
+    const view = { ...props(), selectedId: 'english-c1' }
     render(<CompassView {...view} />)
     fireEvent.click(screen.getByRole('button', { name: 'Edit goal' }))
     expect(view.onOpenEditor).toHaveBeenCalledWith('english-c1')
@@ -389,7 +498,7 @@ describe('CompassView', () => {
   it('offers sign in without editing controls to public visitors', () => {
     const view = { ...props(), canEdit: false }
     render(<CompassView {...view} />)
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^(Edit|Done)/ })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'More options' }))
     fireEvent.click(screen.getByRole('button', { name: 'Owner sign in' }))
     expect(view.onSignIn).toHaveBeenCalledOnce()

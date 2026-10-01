@@ -7,7 +7,7 @@ import { MergeDialog } from './components/MergeDialog'
 import {
   firebaseConfigured, isOwner, saveMap, signInOwner, signOutOwner, subscribeToMap, subscribeToOwner,
 } from './data/firebase'
-import { addGoal, archiveGoal, deleteGoal, mergeGoals, moveGoal, placeInFrontier, restoreGoal,
+import { addGoal, archiveGoal, deleteGoal, mergeGoals, moveGoal, placeInFrontier, restoreGoal, shiftGoal,
   setNodeDetails, setSecondaryLinks, subtreeIds } from './domain/map'
 import { createSeedMap } from './domain/seed'
 import type { GoalMap } from './domain/types'
@@ -92,7 +92,6 @@ export default function App() {
   const [owner, setOwner] = useState<User | null>(null)
   const [fromCache, setFromCache] = useState(false)
   const [loading, setLoading] = useState(firebaseConfigured)
-  const [editMode, setEditMode] = useState(false)
   const [editorId, setEditorId] = useState<string | null | undefined>()
   const [editorBaseRevision, setEditorBaseRevision] = useState<number | null>(null)
   const [mergeId, setMergeId] = useState<string | null>(null)
@@ -101,7 +100,6 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const canEdit = !firebaseConfigured || (isOwner(owner) && !fromCache)
-  const effectiveEditMode = editMode && canEdit
   const dialogOpen = loginOpen || (canEdit && (editorId !== undefined || mergeId !== null || deleteId !== null))
 
   function select(id: string | null, mode: NavigationMode = 'push'): void {
@@ -122,11 +120,11 @@ export default function App() {
       setMap(remote ?? createSeedMap())
       setFromCache(cached)
       setLoading(false)
-      if (cached) { setEditMode(false); setEditorId(undefined); setMergeId(null); setDeleteId(null) }
+      if (cached) { setEditorId(undefined); setMergeId(null); setDeleteId(null) }
     }, (cause) => { setError(cause.message); setLoading(false) })
     const unsubscribeOwner = subscribeToOwner((user) => {
       setOwner(user)
-      if (!isOwner(user)) { setEditMode(false); setEditorId(undefined); setMergeId(null); setDeleteId(null) }
+      if (!isOwner(user)) { setEditorId(undefined); setMergeId(null); setDeleteId(null) }
     })
     return () => { unsubscribeMap(); unsubscribeOwner() }
   }, [])
@@ -204,7 +202,6 @@ export default function App() {
   async function signOut(): Promise<void> {
     try {
       await signOutOwner()
-      setEditMode(false)
       setError('')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Sign out failed.')
@@ -217,12 +214,13 @@ export default function App() {
     {!firebaseConfigured && <p className="state-banner">Local preview · Changes stay in this browser until Firebase is configured.</p>}
     {fromCache && <p className="state-banner">Offline copy · Editing is paused until the latest map is available.</p>}
     {error && !dialogOpen && <div className="state-banner error-banner" role="alert">{error} <button onClick={() => window.location.reload()}>Reload map</button></div>}
-    <CompassView map={map} selectedId={selectedId} editMode={effectiveEditMode} canEdit={canEdit} authEnabled={firebaseConfigured} busy={busy}
-      onSelect={(id) => select(id)} onToggleEdit={() => setEditMode((value) => !value)}
+    <CompassView map={map} selectedId={selectedId} canEdit={canEdit} authEnabled={firebaseConfigured} busy={busy}
+      onSelect={(id) => select(id)}
       onOpenEditor={openEditor}
       onEditNode={(id, details) => persist((current) => setNodeDetails(current, id, details))}
       onAddGoal={(parentId, title) => persist((current) => addGoal(current, { id: crypto.randomUUID(), title, parentId }))}
       onPlace={(id, lane, index, whenFull = 'reject') => persist((current) => placeInFrontier(current, id, lane, index, whenFull))}
+      onShift={(id, direction) => persist((current) => shiftGoal(current, id, direction))}
       onArchive={(id) => { void persist((current) => archiveGoal(current, id)).then((saved) => {
         if (saved) select(null, 'replace')
       }) }}

@@ -12,6 +12,8 @@ import {
   placeInFrontier,
   reorderGoal,
   restoreGoal,
+  shiftGoal,
+  canShiftGoal,
   setSecondaryLinks,
   setNodeDetails,
   setVisibleChildren,
@@ -90,13 +92,14 @@ describe('goal map', () => {
       const id = ids[next(ids.length)]
       const other = ids[next(ids.length)]
       try {
-        const op = next(7)
+        const op = next(8)
         if (op === 0) map = placeInFrontier(map, id, 'active', next(7))
         else if (op === 1) map = placeInFrontier(map, id, 'queue', next(7))
         else if (op === 2) map = placeInFrontier(map, id, null)
         else if (op === 3) map = archiveGoal(map, id)
         else if (op === 4) map = restoreGoal(map, id)
         else if (op === 5) map = deleteGoal(map, id)
+        else if (op === 6) map = shiftGoal(map, id, next(2) ? 1 : -1)
         else map = mergeGoals(map, id, other)
       } catch {
         // a refused operation must leave the map untouched and valid
@@ -104,6 +107,61 @@ describe('goal map', () => {
       if (!map.nodes[ids[0]]) ids.shift()
       expect(() => exportMap(map)).not.toThrow()
     }
+  })
+
+  it('moves a goal in focus among the goals in focus under its direction, in the order of the lane', () => {
+    const map = createSeedMap()
+    expect(canShiftGoal(map, 'launch-blog', -1)).toBe(false)
+    expect(canShiftGoal(map, 'launch-blog', 1)).toBe(true)
+    expect(canShiftGoal(map, 'english-c1', 1)).toBe(false)
+    // Professional autonomy belongs to another direction and is not a neighbour
+    const up = shiftGoal(map, 'english-c1', -1)
+    expect(activeIds(up.frontier)).toEqual(['professional-autonomy', 'english-c1', 'launch-blog'])
+    expect(activeIds(shiftGoal(up, 'english-c1', 1).frontier)).toEqual(['professional-autonomy', 'launch-blog', 'english-c1'])
+    expect(queuedIds(up.frontier)).toEqual(queuedIds(map.frontier))
+    expect(shiftGoal(map, 'launch-blog', -1)).toBe(map)
+  })
+
+  it('moves goals that are not in focus among their own kind, skipping goals that stand elsewhere', () => {
+    const map = createSeedMap()
+    // understand: theology (queued), launch-blog and english-c1 (in focus), then clear speech and philosophy
+    expect(canShiftGoal(map, 'clear-speech-writing', -1)).toBe(false)
+    const up = shiftGoal(map, 'philosophy-humanities', -1)
+    expect(up.nodes.understand.childrenIds).toEqual(
+      ['theology-scripture', 'launch-blog', 'english-c1', 'philosophy-humanities', 'clear-speech-writing'])
+    expect(shiftGoal(up, 'philosophy-humanities', 1).nodes.understand.childrenIds).toEqual(map.nodes.understand.childrenIds)
+    // an in-focus goal between two others does not get in the way
+    const spread = { ...map, nodes: { ...map.nodes, understand: { ...map.nodes.understand,
+      childrenIds: ['clear-speech-writing', 'launch-blog', 'philosophy-humanities', 'english-c1', 'theology-scripture'] } } }
+    expect(shiftGoal(spread, 'philosophy-humanities', -1).nodes.understand.childrenIds).toEqual(
+      ['philosophy-humanities', 'clear-speech-writing', 'launch-blog', 'english-c1', 'theology-scripture'])
+    expect(activeIds(up.frontier)).toEqual(activeIds(map.frontier))
+  })
+
+  it('moves queued goals among the queued goals of their direction and ignores archived ones', () => {
+    let map = placeInFrontier(createSeedMap(), 'philosophy-humanities', 'queue')
+    expect(queuedIds(map.frontier)).toEqual(['theology-scripture', 'software-ai', 'philosophy-humanities'])
+    map = shiftGoal(map, 'philosophy-humanities', -1)
+    expect(queuedIds(map.frontier)).toEqual(['philosophy-humanities', 'theology-scripture', 'software-ai'])
+    expect(canShiftGoal(map, 'software-ai', -1)).toBe(false)
+    const archived = archiveGoal(map, 'theology-scripture')
+    expect(canShiftGoal(archived, 'philosophy-humanities', 1)).toBe(false)
+  })
+
+  it('refuses to shift Soul and the directions, and leaves the map valid', () => {
+    expect(() => shiftGoal(createSeedMap(), 'understand', 1)).toThrow(/permanent/i)
+    expect(() => canShiftGoal(createSeedMap(), 'soul', 1)).toThrow(/permanent/i)
+    expect(() => exportMap(shiftGoal(createSeedMap(), 'english-c1', -1))).not.toThrow()
+  })
+
+  it('lets Soul carry labels but nothing else', () => {
+    const labels = [{ id: 'one', text: '  Seek first  ' }, { id: 'two', text: 'Daily' }]
+    const map = setNodeDetails(createSeedMap(), 'soul', { labels })
+    expect(map.nodes.soul.labels).toEqual([{ id: 'one', text: 'Seek first' }, { id: 'two', text: 'Daily' }])
+    expect(map.nodes.soul.title).toBe('Soul')
+    expect(map.nodes.soul.description).toBe(createSeedMap().nodes.soul.description)
+    expect(() => exportMap(map)).not.toThrow()
+    expect(setNodeDetails(map, 'soul', { labels: [] }).nodes.soul.labels).toBeUndefined()
   })
 
   it('allows secondary links while rejecting placement cycles', () => {
@@ -201,7 +259,9 @@ describe('goal map', () => {
     expect(map.nodes['english-c1'].milestones).toHaveLength(1)
     expect(() => setNodeDetails(map, 'english-c1', { title: '   ' })).toThrow(/title/i)
     expect(() => setNodeDetails(map, 'create', { title: 'Renamed' })).toThrow(/permanent/i)
-    expect(() => setNodeDetails(map, 'soul', { labels: [] })).toThrow(/permanent/i)
+    expect(() => setNodeDetails(map, 'soul', { title: 'Mind' })).toThrow(/permanent/i)
+    expect(() => setNodeDetails(map, 'soul', { description: 'Changed' })).toThrow(/permanent/i)
+    expect(() => setNodeDetails(map, 'soul', { milestones: [] })).toThrow(/permanent/i)
     expect(() => setNodeDetails(map, 'missing', { labels: [] })).toThrow(/unknown/i)
     expect(setNodeDetails(map, 'create', { labels: [{ id: 'x', text: 'Focus' }] }).nodes.create.labels).toEqual([{ id: 'x', text: 'Focus' }])
     expect(() => exportMap(map)).not.toThrow()

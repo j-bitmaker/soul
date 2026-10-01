@@ -117,7 +117,6 @@ describe('Soul compass', () => {
     const replace = vi.spyOn(window.history, 'replaceState')
     clickOverviewGoal(/^Launch Blog/)
     expect(push).toHaveBeenCalledTimes(1)
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
     await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
     expect(await screen.findByRole('heading', { name: 'Three directions' })).toBeVisible()
@@ -128,7 +127,7 @@ describe('Soul compass', () => {
 
   it('saves an edited goal through the explicit edit mode', async () => {
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await screen.findByRole('heading', { name: 'Soul' })
     clickOverviewGoal(/^Launch Blog/)
     fireEvent.click(screen.getByRole('button', { name: 'Edit goal' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Write publicly' } })
@@ -200,7 +199,7 @@ describe('Soul compass', () => {
   it('keeps the editor open and reports a failed save', async () => {
     mocks.saveMap.mockRejectedValueOnce(new Error('Map changed on another device'))
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await screen.findByRole('heading', { name: 'Soul' })
     clickOverviewGoal(/^Launch Blog/)
     fireEvent.click(screen.getByRole('button', { name: 'Edit goal' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Write publicly' } })
@@ -215,7 +214,6 @@ describe('Soul compass', () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Soul' })
     clickOverviewGoal(/^Launch Blog/)
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Network unavailable')
     expect(screen.getByRole('heading', { name: 'Launch Blog' })).toBeVisible()
@@ -225,7 +223,10 @@ describe('Soul compass', () => {
     mocks.cached = true
     render(<App />)
     expect(await screen.findByText(/Offline copy/)).toBeVisible()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete Launch Blog' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Priority of Launch Blog' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('New goal in Practical Agency')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add label to Soul' })).not.toBeInTheDocument()
   })
 
   it('shows a sign-in error inside the owner dialog', async () => {
@@ -245,7 +246,6 @@ describe('Soul compass', () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Soul' })
     clickOverviewGoal(/^Launch Blog/)
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     fireEvent.change(screen.getByLabelText('Priority'), { target: { value: 'queue' } })
     await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
     expect(mocks.saveMap.mock.calls[0][0].frontier).toEqual([
@@ -261,7 +261,6 @@ describe('Soul compass', () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Soul' })
     clickOverviewGoal(/^Launch Blog/)
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(mocks.saveMap).not.toHaveBeenCalled()
@@ -300,7 +299,6 @@ describe('Soul compass', () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Soul' })
     clickOverviewGoal(/^Launch Blog/)
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Network unavailable')
@@ -334,9 +332,91 @@ describe('Soul compass', () => {
     expect(await screen.findByText('Speak aloud · Daily')).toBeVisible()
   })
 
+  it('deletes a goal with one tap on its row on the overview, after a confirmation, and stays there', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Soul' })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Launch Blog' }))
+    expect(screen.getByRole('dialog', { name: 'Delete goal' })).toHaveTextContent('Launch Blog')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(mocks.saveMap).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /^Launch Blog/ })).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Launch Blog' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
+    const saved = mocks.saveMap.mock.calls[0][0]
+    expect(saved.nodes['launch-blog']).toBeUndefined()
+    expect(saved.nodes.understand.childrenIds).not.toContain('launch-blog')
+    expect(saved.frontier.some((entry: { nodeId: string }) => entry.nodeId === 'launch-blog')).toBe(false)
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete goal' })).not.toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: /^Launch Blog/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Three directions' })).toBeVisible()
+    expect(window.location.hash).toBe('')
+  })
+
+  it('changes priority from the menu on a card, one save each: reorder, put in focus, send to the Queue', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Soul' })
+    const card = () => document.querySelector('.cluster-card[data-tone="expression"]') as HTMLElement
+    const titles = () => [...card().querySelectorAll('.cluster-goal > span:first-child')].map((node) => node.textContent)
+    expect(titles()).toEqual(['Launch Blog', 'English C1', 'Clear speech / writing', 'Philosophy / humanities'])
+
+    fireEvent.click(within(card()).getByRole('button', { name: 'Priority of English C1' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Move up/ }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
+    expect(mocks.saveMap.mock.calls[0][0].frontier.map((entry: { nodeId: string }) => entry.nodeId).slice(0, 3))
+      .toEqual(['professional-autonomy', 'english-c1', 'launch-blog'])
+    await waitFor(() => expect(titles().slice(0, 2)).toEqual(['English C1', 'Launch Blog']))
+
+    fireEvent.click(within(card()).getByRole('button', { name: 'Priority of Philosophy / humanities' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Move up/ }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(titles().slice(2)).toEqual(['Philosophy / humanities', 'Clear speech / writing']))
+
+    fireEvent.click(within(card()).getByRole('button', { name: 'Priority of Philosophy / humanities' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Put in focus/ }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(3))
+    expect(mocks.saveMap.mock.calls[2][0].frontier.find((entry: { nodeId: string }) => entry.nodeId === 'philosophy-humanities'))
+      .toEqual({ nodeId: 'philosophy-humanities', status: 'active' })
+    await waitFor(() => expect(titles()[2]).toBe('Philosophy / humanities'))
+
+    fireEvent.click(within(card()).getByRole('button', { name: 'Priority of Clear speech / writing' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Move to the Queue/ }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(4))
+    expect(mocks.saveMap.mock.calls[3][0].frontier.at(-1)).toEqual({ nodeId: 'clear-speech-writing', status: 'queued' })
+    await waitFor(() => expect(titles()).not.toContain('Clear speech / writing'))
+    expect(window.location.hash).toBe('')
+  })
+
+  it('refuses a sixth goal in focus with a message and changes nothing', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Soul' })
+    const map = createSeedMap()
+    map.frontier = ['professional-autonomy', 'launch-blog', 'english-c1', 'own-products', 'attention-focus']
+      .map((nodeId) => ({ nodeId, status: 'active' as const }))
+    act(() => { mocks.emitMap?.(map, false) })
+    fireEvent.click(screen.getByRole('button', { name: 'Priority of Clear speech / writing' }))
+    expect(screen.getByRole('menuitem', { name: /Put in focus/ })).toBeDisabled()
+    expect(mocks.saveMap).not.toHaveBeenCalled()
+  })
+
+  it('adds a label to Soul right in the hero with one save', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Soul' })
+    fireEvent.click(screen.getByRole('button', { name: 'Add label to Soul' }))
+    fireEvent.change(screen.getByLabelText('New label for Soul'), { target: { value: '  Seek first  ' } })
+    fireEvent.keyDown(screen.getByLabelText('New label for Soul'), { key: 'Enter' })
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
+    const saved = mocks.saveMap.mock.calls[0][0]
+    expect(saved.nodes.soul.labels).toEqual([expect.objectContaining({ text: 'Seek first' })])
+    expect(saved.nodes.soul.title).toBe('Soul')
+    expect(saved.nodes.soul.childrenIds).toEqual(['understand', 'create', 'mastery'])
+    expect(await screen.findByText('Seek first')).toBeVisible()
+  })
+
   it('rejects a stale editor draft after a remote map revision arrives', async () => {
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await screen.findByRole('heading', { name: 'Soul' })
     clickOverviewGoal(/^Launch Blog/)
     fireEvent.click(screen.getByRole('button', { name: 'Edit goal' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Write publicly' } })
@@ -351,7 +431,7 @@ describe('Soul compass', () => {
 
   it('closes editing controls when the map switches to an offline copy', async () => {
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await screen.findByRole('heading', { name: 'Soul' })
     clickOverviewGoal(/^Launch Blog/)
     fireEvent.click(screen.getByRole('button', { name: 'Edit goal' }))
     act(() => { mocks.emitMap?.(createSeedMap(), true) })
