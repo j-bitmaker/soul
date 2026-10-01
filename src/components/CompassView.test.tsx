@@ -29,7 +29,7 @@ describe('CompassView', () => {
     render(<CompassView {...view} />)
     expect(screen.getByRole('heading', { name: 'Soul' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Understand & Express' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Create & Be Free' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Practical Agency' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Self-Mastery' })).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Three directions' })).toBeVisible()
     expect(screen.queryByRole('heading', { name: /Active Frontier|Queue/ })).not.toBeInTheDocument()
@@ -37,7 +37,7 @@ describe('CompassView', () => {
     expect(screen.queryByText(/0[1-3] \/ 03/)).not.toBeInTheDocument()
     expect(document.querySelector('.frontier-status')).toBeNull()
     expect(screen.queryByText(/^(primary|active|maintain)$/i)).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Create & Be Free' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Practical Agency' }))
     expect(view.onSelect).toHaveBeenCalledWith('create')
   })
 
@@ -220,11 +220,11 @@ describe('CompassView', () => {
     const view = props()
     const rendered = render(<CompassView {...view} />)
     const card = document.querySelector('.cluster-card[data-tone="freedom"]') as HTMLElement
-    fireEvent.change(within(card).getByLabelText('New goal in Create & Be Free'), { target: { value: 'Learn welding' } })
-    fireEvent.click(within(card).getByRole('button', { name: 'Add goal to Create & Be Free' }))
+    fireEvent.change(within(card).getByLabelText('New goal in Practical Agency'), { target: { value: 'Learn welding' } })
+    fireEvent.click(within(card).getByRole('button', { name: 'Add goal to Practical Agency' }))
     expect(view.onAddGoal).toHaveBeenCalledWith('create', 'Learn welding')
     rendered.rerender(<CompassView {...view} canEdit={false} />)
-    expect(screen.queryByLabelText('New goal in Create & Be Free')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('New goal in Practical Agency')).not.toBeInTheDocument()
   })
 
   it('edits the labels of the goal being viewed', () => {
@@ -365,7 +365,7 @@ describe('CompassView', () => {
     expect(view.onOpenMerge).toHaveBeenCalledWith('english-c1')
     fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
     expect(view.onArchive).toHaveBeenCalledWith('english-c1')
-    fireEvent.click(screen.getByRole('button', { name: 'Also Create & Be Free' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Also Practical Agency' }))
     expect(view.onSelect).toHaveBeenCalledWith('create')
     fireEvent.click(screen.getByRole('button', { name: 'Soul' }))
     expect(view.onSelect).toHaveBeenCalledWith(null)

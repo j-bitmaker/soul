@@ -79,6 +79,22 @@ describe('map import and export', () => {
     ])
   })
 
+  it('shows the renamed second direction, but only over its old default title', () => {
+    const old = createSeedMap()
+    old.nodes.create.title = 'Create & Be Free'
+    old.nodes['own-products'].title = 'Create & Be Free'
+    const migrated = parseMap(JSON.stringify(old))
+    expect(migrated.nodes.create.title).toBe('Practical Agency')
+    expect(migrated.nodes['own-products'].title).toBe('Create & Be Free')
+    expect(migrated.nodes.understand.title).toBe('Understand & Express')
+    expect(migrateMap(migrateMap(old))).toEqual(migrateMap(old))
+    expect(createSeedMap().nodes.create.title).toBe('Practical Agency')
+
+    const custom = createSeedMap()
+    custom.nodes.create.title = 'Making things'
+    expect(parseMap(JSON.stringify(custom)).nodes.create.title).toBe('Making things')
+  })
+
   it('leaves malformed legacy routines and frontier entries alone so they are rejected', () => {
     const broken = legacyMap() as { nodes: Record<string, Record<string, unknown>> }
     broken.nodes.understand.routines = [{ id: 'one', title: '   ' }]

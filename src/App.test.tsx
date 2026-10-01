@@ -54,7 +54,7 @@ describe('Soul compass', () => {
     render(<App />)
     expect(await screen.findByRole('heading', { name: 'Soul' })).toBeVisible()
     expect(screen.getAllByRole('button', { name: /Understand & Express/ })[0]).toBeVisible()
-    expect(screen.getAllByRole('button', { name: /Create & Be Free/ })[0]).toBeVisible()
+    expect(screen.getAllByRole('button', { name: /Practical Agency/ })[0]).toBeVisible()
     expect(screen.getAllByRole('button', { name: /Self-Mastery/ })[0]).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Three directions' })).toBeVisible()
     expect(screen.queryByRole('heading', { name: /Active Frontier|Queue/ })).not.toBeInTheDocument()
@@ -66,7 +66,7 @@ describe('Soul compass', () => {
   it('zooms from a cluster into a goal without requiring extra fields', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Soul' })
-    clickOverviewGoal(/^Create & Be Free/)
+    clickOverviewGoal(/^Practical Agency/)
     fireEvent.click(screen.getByRole('button', { name: /Professional autonomy/ }))
     expect(screen.getByRole('heading', { name: 'Professional autonomy' })).toBeVisible()
     expect(screen.getByText(/stable professional and economic position/)).toBeVisible()
@@ -75,28 +75,28 @@ describe('Soul compass', () => {
   it('gives each page a history entry so the back gesture steps back one level', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Soul' })
-    clickOverviewGoal(/^Create & Be Free/)
+    clickOverviewGoal(/^Practical Agency/)
     expect(window.location.hash).toBe('#/goal/create')
     fireEvent.click(screen.getByRole('button', { name: /Professional autonomy/ }))
     expect(window.location.hash).toBe('#/goal/professional-autonomy')
     act(() => window.history.back())
-    expect(await screen.findByRole('heading', { name: 'Create & Be Free', level: 1 })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'Practical Agency', level: 1 })).toBeVisible()
     act(() => window.history.back())
     expect(await screen.findByRole('heading', { name: 'Three directions' })).toBeVisible()
     expect(window.location.hash).toBe('')
     act(() => window.history.forward())
-    expect(await screen.findByRole('heading', { name: 'Create & Be Free', level: 1 })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'Practical Agency', level: 1 })).toBeVisible()
   })
 
   it('keeps the page you left one step back after returning to the overview', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Soul' })
-    clickOverviewGoal(/^Create & Be Free/)
+    clickOverviewGoal(/^Practical Agency/)
     fireEvent.click(screen.getByRole('button', { name: 'Soul, return to overview' }))
     expect(window.location.hash).toBe('')
     expect(screen.getByRole('heading', { name: 'Three directions' })).toBeVisible()
     act(() => window.history.back())
-    expect(await screen.findByRole('heading', { name: 'Create & Be Free', level: 1 })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'Practical Agency', level: 1 })).toBeVisible()
   })
 
   it('opens the page named by a link and treats unknown links as the overview', async () => {
@@ -173,7 +173,7 @@ describe('Soul compass', () => {
 
   it('adds a goal to a page with one line and clears the field', async () => {
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Create & Be Free' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Practical Agency' }))
     fireEvent.change(screen.getByLabelText('New goal'), { target: { value: 'Learn to sell' } })
     fireEvent.keyDown(screen.getByLabelText('New goal'), { key: 'Enter' })
     fireEvent.submit(screen.getByLabelText('New goal').closest('form') as HTMLFormElement)
@@ -190,7 +190,7 @@ describe('Soul compass', () => {
   it('keeps what was typed and shows the error when an inline save fails', async () => {
     mocks.saveMap.mockRejectedValueOnce(new Error('Network unavailable'))
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Create & Be Free' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Practical Agency' }))
     fireEvent.change(screen.getByLabelText('New goal'), { target: { value: 'Learn to sell' } })
     fireEvent.submit(screen.getByLabelText('New goal').closest('form') as HTMLFormElement)
     expect(await screen.findByRole('alert')).toHaveTextContent('Network unavailable')
@@ -310,14 +310,14 @@ describe('Soul compass', () => {
   it('adds a goal right on a direction card in one save and clears the field', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Soul' })
-    fireEvent.change(screen.getByLabelText('New goal in Create & Be Free'), { target: { value: 'Learn welding' } })
-    fireEvent.submit(screen.getByLabelText('New goal in Create & Be Free').closest('form') as HTMLFormElement)
+    fireEvent.change(screen.getByLabelText('New goal in Practical Agency'), { target: { value: 'Learn welding' } })
+    fireEvent.submit(screen.getByLabelText('New goal in Practical Agency').closest('form') as HTMLFormElement)
     await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
     const saved = mocks.saveMap.mock.calls[0][0]
     const added = Object.values(saved.nodes as Record<string, { id: string; title: string; parentId: string }>).find((node) => node.title === 'Learn welding')
     expect(added).toMatchObject({ parentId: 'create' })
     expect(saved.frontier.some((entry: { nodeId: string }) => entry.nodeId === added?.id)).toBe(false)
-    await waitFor(() => expect(screen.getByLabelText('New goal in Create & Be Free')).toHaveValue(''))
+    await waitFor(() => expect(screen.getByLabelText('New goal in Practical Agency')).toHaveValue(''))
     expect(await screen.findByRole('button', { name: /^Learn welding/ })).toBeVisible()
   })
 
