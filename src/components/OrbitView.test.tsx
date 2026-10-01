@@ -47,14 +47,14 @@ describe('OrbitView', () => {
   it('shows Soul and the three directions as buttons, in reading order', () => {
     render(<OrbitView map={createSeedMap()} onSelect={vi.fn()} />)
     const nodes = screen.getAllByRole('button')
-    expect(nodes.map((node) => node.textContent)).toEqual(['Understand & Express', 'Create & Be Free', 'Self-Mastery'])
+    expect(nodes.map((node) => node.textContent)).toEqual(['Understand & Express', 'Practical Agency', 'Self-Mastery'])
     expect(document.querySelector('.orbit-soul')).toHaveTextContent('Soul')
   })
 
   it('opens the direction that was chosen', () => {
     const onSelect = vi.fn()
     render(<OrbitView map={createSeedMap()} onSelect={onSelect} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Create & Be Free' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Practical Agency' }))
     expect(onSelect).toHaveBeenCalledWith('create')
     fireEvent.click(screen.getByRole('button', { name: 'Self-Mastery' }))
     expect(onSelect).toHaveBeenLastCalledWith('mastery')
@@ -80,7 +80,7 @@ describe('OrbitView', () => {
   it('lights the lines of the direction being pointed at or focused, and only those', () => {
     render(<OrbitView map={createSeedMap()} onSelect={vi.fn()} />)
     const orbit = document.querySelector('.orbit') as HTMLElement
-    const create = screen.getByRole('button', { name: 'Create & Be Free' })
+    const create = screen.getByRole('button', { name: 'Practical Agency' })
     expect(orbit).not.toHaveAttribute('data-focus')
     expect(document.querySelector('.is-lit, .is-dim')).toBeNull()
 

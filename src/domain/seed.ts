@@ -41,7 +41,7 @@ export function createSeedMap(): GoalMap {
     understand: { ...node('understand', 'Understand & Express', 'soul', understand.map(([id]) => id)),
       description: 'Understand truth, form your own understanding, and express it clearly.',
       labels: [{ id: 'read-bible', text: 'Read Bible · Daily' }] },
-    create: { ...node('create', 'Create & Be Free', 'soul', create.map(([id]) => id)),
+    create: { ...node('create', 'Practical Agency', 'soul', create.map(([id]) => id)),
       description: 'Create useful things, sustain yourself, and preserve freedom of choice.' },
     mastery: { ...node('mastery', 'Self-Mastery', 'soul', mastery.map(([id]) => id)),
       description: 'Care for attention, energy, habits, and ways of working.' },

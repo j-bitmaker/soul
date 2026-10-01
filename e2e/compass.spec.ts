@@ -6,7 +6,7 @@ test('overview, focus, edit, export, and offline revisit', async ({ page, contex
   await expect(page.getByRole('heading', { name: 'Three directions' })).toBeVisible()
   await expect(page.getByRole('heading', { name: /Active Frontier|Queue/ })).toHaveCount(0)
 
-  await page.locator('.cluster-open', { hasText: 'Create & Be Free' }).click()
+  await page.locator('.cluster-open', { hasText: 'Practical Agency' }).click()
   await page.getByRole('button', { name: /Professional autonomy/ }).click()
   await expect(page.getByRole('heading', { name: 'Professional autonomy' })).toBeVisible()
 
@@ -83,19 +83,19 @@ test('shows what Soul means and the Primary goal without overflow on desktop and
 
 test('the back gesture steps back one page instead of leaving the app', async ({ page }) => {
   await page.goto('/')
-  await page.locator('.cluster-open', { hasText: 'Create & Be Free' }).click()
+  await page.locator('.cluster-open', { hasText: 'Practical Agency' }).click()
   await page.getByRole('button', { name: /Professional autonomy/ }).click()
   await expect(page.getByRole('heading', { name: 'Professional autonomy', level: 1 })).toBeVisible()
   expect(page.url()).toMatch(/#\/goal\/professional-autonomy$/)
 
   await page.goBack()
-  await expect(page.getByRole('heading', { name: 'Create & Be Free', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Practical Agency', level: 1 })).toBeVisible()
   await page.goBack()
   await expect(page.getByRole('heading', { name: 'Three directions' })).toBeVisible()
   expect(page.url()).toMatch(/\/soul\/$/)
 
   await page.goForward()
-  await expect(page.getByRole('heading', { name: 'Create & Be Free', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Practical Agency', level: 1 })).toBeVisible()
 })
 
 test('opens a goal from a link and starts each page at the top', async ({ page }) => {
@@ -114,8 +114,8 @@ test('opens a goal from a link and starts each page at the top', async ({ page }
 test('adds a goal right on a direction card and deletes it explicitly', async ({ page }) => {
   await page.goto('/')
   const card = page.locator('.cluster-card[data-tone="freedom"]')
-  await card.getByLabel('New goal in Create & Be Free').fill('A goal to remove')
-  await card.getByRole('button', { name: 'Add goal to Create & Be Free' }).click()
+  await card.getByLabel('New goal in Practical Agency').fill('A goal to remove')
+  await card.getByRole('button', { name: 'Add goal to Practical Agency' }).click()
   const goal = card.getByRole('button', { name: /^A goal to remove/ })
   await expect(goal).toBeVisible()
 
@@ -128,7 +128,7 @@ test('adds a goal right on a direction card and deletes it explicitly', async ({
   await page.getByRole('button', { name: 'Delete', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Delete goal' })).toContainText('cannot be undone')
   await page.getByRole('button', { name: 'Delete permanently' }).click()
-  await expect(page.getByRole('heading', { name: 'Create & Be Free', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Practical Agency', level: 1 })).toBeVisible()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.getByRole('button', { name: /A goal to remove/ })).toHaveCount(0)
 })
@@ -253,7 +253,7 @@ test('shows the directions in a circle around Soul and remembers the choice', as
 
   const stage = (await orbit.boundingBox())!
   const boxes = []
-  for (const name of ['Understand & Express', 'Create & Be Free', 'Self-Mastery']) {
+  for (const name of ['Understand & Express', 'Practical Agency', 'Self-Mastery']) {
     const box = (await orbit.getByRole('button', { name }).boundingBox())!
     expect(box.x).toBeGreaterThanOrEqual(stage.x - 1)
     expect(box.x + box.width).toBeLessThanOrEqual(stage.x + stage.width + 1)
@@ -265,15 +265,15 @@ test('shows the directions in a circle around Soul and remembers the choice', as
     a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y
   expect(apart(boxes[0], boxes[1]) && apart(boxes[0], boxes[2]) && apart(boxes[1], boxes[2])).toBe(true)
 
-  await orbit.getByRole('button', { name: 'Create & Be Free' }).hover()
+  await orbit.getByRole('button', { name: 'Practical Agency' }).hover()
   await expect(orbit.locator('.orbit-link.is-lit')).toHaveCount(3)
 
   await page.reload()
   await expect(page.locator('.orbit')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Orbit' })).toHaveAttribute('aria-pressed', 'true')
 
-  await page.locator('.orbit').getByRole('button', { name: 'Create & Be Free' }).click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Create & Be Free' })).toBeVisible()
+  await page.locator('.orbit').getByRole('button', { name: 'Practical Agency' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Practical Agency' })).toBeVisible()
   await page.goBack()
   await expect(page.locator('.orbit')).toBeVisible()
 
@@ -291,7 +291,7 @@ test('keeps the orbit inside the screen and readable from phone to desktop', asy
     if (await page.getByRole('button', { name: 'Orbit' }).getAttribute('aria-pressed') !== 'true') await page.getByRole('button', { name: 'Orbit' }).click()
     await expect(page.locator('.orbit')).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-    for (const name of ['Understand & Express', 'Create & Be Free', 'Self-Mastery']) {
+    for (const name of ['Understand & Express', 'Practical Agency', 'Self-Mastery']) {
       const box = (await page.locator('.orbit').getByRole('button', { name }).boundingBox())!
       expect(box.x).toBeGreaterThanOrEqual(0)
       expect(box.x + box.width).toBeLessThanOrEqual(width)

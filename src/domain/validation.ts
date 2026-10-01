@@ -165,15 +165,31 @@ function migrateFrontier(frontier: unknown[]): unknown[] {
   return tidy ? fromLegacyOrder(frontier as { nodeId: string; status: string }[]) : frontier
 }
 
+/** Direction names that changed: a saved map keeps the old default title until the owner next saves. */
+const RENAMED_DIRECTIONS: Record<string, { from: string; to: string }> = {
+  create: { from: 'Create & Be Free', to: 'Practical Agency' },
+}
+
+/** Gives a direction its new name, but only while it still has the old default; any other title is the owner's. */
+function renameDirections(nodes: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...nodes }
+  for (const [id, { from, to }] of Object.entries(RENAMED_DIRECTIONS)) {
+    const node = next[id]
+    if (isPlain(node) && node.title === from) next[id] = { ...node, title: to }
+  }
+  return next
+}
+
 /**
  * Brings older maps to the current shape without losing anything: routines become labels and the
- * old Primary/Active/Maintain statuses become an order (the first active goal is the Primary). Pure and idempotent.
+ * old Primary/Active/Maintain statuses become an order (the first active goal is the Primary), and a renamed
+ * direction shows its new name. Pure and idempotent.
  */
 export function migrateMap(value: unknown): unknown {
   if (!isPlain(value)) return value
   const map = { ...value }
   if (isPlain(map.nodes)) {
-    map.nodes = Object.fromEntries(Object.entries(map.nodes).map(([id, node]) => [id, migrateNode(node)]))
+    map.nodes = renameDirections(Object.fromEntries(Object.entries(map.nodes).map(([id, node]) => [id, migrateNode(node)])))
   }
   if (Array.isArray(map.frontier)) map.frontier = migrateFrontier(map.frontier)
   return map
