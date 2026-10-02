@@ -238,28 +238,18 @@ describe('CompassView', () => {
     expect(screen.getAllByRole('group', { name: /Warmth of/ })).toHaveLength(3)
   })
 
-  it('stacks the directions colder first and the warmest last in one column, and keeps their places side by side', () => {
+  it('keeps the directions in the same order at every width, whatever their warmth', () => {
     const map = structuredClone(createSeedMap())
     map.nodes.understand.warmth = 9
     map.nodes.create.warmth = 1
     map.nodes.mastery.warmth = 5
     const titles = () => [...document.querySelectorAll('.cluster-open')].map((button) => button.textContent)
-    const query = (matches: boolean) => vi.stubGlobal('matchMedia', vi.fn(() => ({ matches, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
-    query(true)
-    const stacked = render(<CompassView {...props(map)} />)
-    expect(titles()).toEqual(['Practical Agency', 'Self-Mastery', 'Understand & Express'])
-    stacked.unmount()
-    query(false)
-    render(<CompassView {...props(map)} />)
-    expect(titles()).toEqual(['Understand & Express', 'Practical Agency', 'Self-Mastery'])
-    vi.unstubAllGlobals()
-  })
-
-  it('keeps the usual order in one column while no direction has a value', () => {
-    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
-    render(<CompassView {...props()} />)
-    expect([...document.querySelectorAll('.cluster-open')].map((button) => button.textContent))
-      .toEqual(['Understand & Express', 'Practical Agency', 'Self-Mastery'])
+    for (const narrow of [true, false]) {
+      vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: narrow, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+      const rendered = render(<CompassView {...props(map)} />)
+      expect(titles()).toEqual(['Understand & Express', 'Practical Agency', 'Self-Mastery'])
+      rendered.unmount()
+    }
     vi.unstubAllGlobals()
   })
 

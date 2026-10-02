@@ -6,7 +6,7 @@ import { canShiftGoal, type NodeDetails } from '../domain/map'
 import { LabelPills, laneOf, nearestCluster, pathTo, toneById } from './goalView'
 import { EditableLabels, InlineAdd, InlineText } from './InlineEdit'
 import { PriorityMenu, type PriorityChoice } from './PriorityMenu'
-import { byWarmth, useStacked, warmthVars } from './warmth'
+import { warmthVars } from './warmth'
 import { WarmthMeter } from './WarmthMeter'
 import { DirectionsSwitch, OrbitView, readDirectionsView, writeDirectionsView, type DirectionsView } from './OrbitView'
 
@@ -150,10 +150,8 @@ function CompassMark() {
 function Overview({ props }: { props: CompassViewProps }) {
   const soul = props.map.nodes[ROOT_ID]
   const [view, setView] = useState<DirectionsView>(readDirectionsView)
-  const stacked = useStacked()
-  // In one column the colder directions (the ones that need attention) come first and the warmest last; side by side they keep their places.
-  const inOrder = CLUSTER_IDS.map((id) => props.map.nodes[id]).filter((node): node is GoalNode => Boolean(node))
-  const directions = stacked ? byWarmth(inOrder) : inOrder
+  // The directions keep their places at every width.
+  const directions = CLUSTER_IDS.map((id) => props.map.nodes[id]).filter((node): node is GoalNode => Boolean(node))
   function changeView(next: DirectionsView): void {
     setView(next)
     writeDirectionsView(next)

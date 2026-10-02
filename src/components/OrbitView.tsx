@@ -4,7 +4,7 @@ import type { GoalMap, GoalNode } from '../domain/types'
 import { CLUSTER_IDS, WARMTH_MAX } from '../domain/types'
 import { toneById } from './goalView'
 import { ORBIT, orbitLayout, type OrbitLink } from './orbitGeometry'
-import { byWarmth, needsAttention, useStacked, warmthColor, warmthVars, warmthWord } from './warmth'
+import { needsAttention, warmthColor, warmthVars, warmthWord } from './warmth'
 import { WarmthMeter } from './WarmthMeter'
 
 export type DirectionsView = 'cards' | 'orbit'
@@ -76,7 +76,6 @@ export function OrbitView({ map, onSelect, canEdit = false, busy, onWarmth }: {
   onWarmth?: (id: string, warmth: number | null) => void
 }) {
   const [focus, setFocus] = useState<number | null>(null)
-  const stacked = useStacked()
   const directions = CLUSTER_IDS.map((id) => map.nodes[id]).filter((node): node is GoalNode => Boolean(node))
   const colours = CLUSTER_IDS.map((id, index) => {
     const warmth = map.nodes[id]?.warmth
@@ -111,7 +110,7 @@ export function OrbitView({ map, onSelect, canEdit = false, busy, onWarmth }: {
     <p className="visually-hidden">Soul holds the three directions. Each direction leads to the next: Understand, Create, Self-Mastery, and back again.</p>
   </div>
   {showPanel && <div className="orbit-warmth">
-    {(stacked ? byWarmth(directions) : directions).map((node) => <div className="orbit-warmth-row" key={node.id} data-warm={node.warmth === undefined ? undefined : ''} style={warmthVars(node.warmth)}>
+    {directions.map((node) => <div className="orbit-warmth-row" key={node.id} data-warm={node.warmth === undefined ? undefined : ''} style={warmthVars(node.warmth)}>
       <p className="orbit-warmth-title">{node.title}</p>
       <WarmthMeter title={node.title} value={node.warmth} editable={canEdit} disabled={busy} onChange={(warmth) => onWarmth?.(node.id, warmth)} />
     </div>)}

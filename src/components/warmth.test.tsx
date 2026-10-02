@@ -1,8 +1,5 @@
-import { act, renderHook } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  byWarmth, needsAttention, STACKED_QUERY, useStacked, warmthBand, warmthColor, warmthVars, warmthWord, WARMTH_COLORS,
-} from './warmth'
+import { describe, expect, it } from 'vitest'
+import { needsAttention, warmthBand, warmthColor, warmthVars, warmthWord, WARMTH_COLORS } from './warmth'
 
 const channels = (hex: string): number[] => [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16))
 function luminance(hex: string): number {
@@ -14,8 +11,6 @@ function luminance(hex: string): number {
 }
 const contrastOnWhite = (hex: string): number => 1.05 / (luminance(hex) + 0.05)
 const vars = (value: number): Record<string, string> => warmthVars(value) as Record<string, string>
-
-afterEach(() => { vi.unstubAllGlobals() })
 
 describe('warmth palette', () => {
   it('has one distinct colour for each value 0-10, and each reads as text on white', () => {
@@ -111,38 +106,5 @@ describe('warmthVars', () => {
   it('grows quieter with every step up: the band never thickens as the value rises', () => {
     const bands = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => parseInt(vars(value)['--tone-band'], 10))
     expect(bands).toEqual([...bands].sort((left, right) => right - left))
-  })
-})
-
-describe('byWarmth', () => {
-  it('puts the colder first and the warmest last, keeping the order of equals; no value counts as neutral', () => {
-    const items: { id: string; warmth?: number }[] = [{ id: 'a', warmth: 8 }, { id: 'b', warmth: 2 }, { id: 'c' }, { id: 'd', warmth: 2 }, { id: 'e', warmth: 0 }]
-    expect(byWarmth(items).map((item) => item.id)).toEqual(['e', 'b', 'd', 'c', 'a'])
-    expect(items[0].id).toBe('a')
-    const unrated: { id: string; warmth?: number }[] = [{ id: 'x' }, { id: 'y' }, { id: 'z' }]
-    expect(byWarmth(unrated).map((item) => item.id)).toEqual(['x', 'y', 'z'])
-    const mixed: { id: string; warmth?: number }[] = [{ id: 'x', warmth: 6 }, { id: 'y' }, { id: 'z', warmth: 4 }]
-    expect(byWarmth(mixed).map((item) => item.id)).toEqual(['z', 'y', 'x'])
-  })
-})
-
-describe('useStacked', () => {
-  it('is false where the browser cannot tell', () => {
-    expect(renderHook(() => useStacked()).result.current).toBe(false)
-  })
-
-  it('follows the stacked layout as the window changes', () => {
-    let listener: () => void = () => undefined
-    let matches = true
-    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-      get matches() { return query === STACKED_QUERY && matches },
-      addEventListener: (_type: string, callback: () => void) => { listener = callback },
-      removeEventListener: vi.fn(),
-    })))
-    const { result } = renderHook(() => useStacked())
-    expect(result.current).toBe(true)
-    matches = false
-    act(() => listener())
-    expect(result.current).toBe(false)
   })
 })

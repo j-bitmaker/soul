@@ -1,4 +1,4 @@
-import { useSyncExternalStore, type CSSProperties } from 'react'
+import type { CSSProperties } from 'react'
 import { WARMTH_MAX } from '../domain/types'
 
 /**
@@ -20,12 +20,6 @@ export type WarmthBand = 'cold' | 'cooling' | 'alive' | 'warm' | 'very-warm'
 const WORDS: Record<WarmthBand, string> = {
   cold: 'Cold', cooling: 'Cooling', alive: 'Alive', warm: 'Warm', 'very-warm': 'Very Warm',
 }
-
-/** A direction without a value counts as neutral where directions are put in order. */
-export const NEUTRAL_WARMTH = 5
-
-/** The breakpoint at which the direction cards stack into one column (the same as in styles.css). */
-export const STACKED_QUERY = '(max-width: 900px)'
 
 function whole(value: number): number {
   return Math.max(0, Math.min(WARMTH_MAX, Math.round(value)))
@@ -94,30 +88,4 @@ export function warmthVars(value: number | undefined): CSSProperties {
     '--tone-band': `${look.band}px`,
     '--tone-shadow': look.shadow,
   } as CSSProperties
-}
-
-/**
- * Colder first, warmest last (a direction with no value counts as neutral). Stable, so equal values keep their order.
- * Used where the directions are stacked in one column, so the ones that need attention come first.
- */
-export function byWarmth<T extends { warmth?: number }>(items: readonly T[]): T[] {
-  return items.map((item, at) => ({ item, at }))
-    .sort((left, right) => (left.item.warmth ?? NEUTRAL_WARMTH) - (right.item.warmth ?? NEUTRAL_WARMTH) || left.at - right.at)
-    .map(({ item }) => item)
-}
-
-function subscribe(onChange: () => void): () => void {
-  if (typeof window.matchMedia !== 'function') return () => undefined
-  const query = window.matchMedia(STACKED_QUERY)
-  query.addEventListener('change', onChange)
-  return () => query.removeEventListener('change', onChange)
-}
-
-/** Are the direction cards stacked in one column right now? (Always false where the browser cannot tell.) */
-export function useStacked(): boolean {
-  return useSyncExternalStore(
-    subscribe,
-    () => typeof window.matchMedia === 'function' && window.matchMedia(STACKED_QUERY).matches,
-    () => false,
-  )
 }

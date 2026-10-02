@@ -517,24 +517,29 @@ test('sets the warmth with the keyboard too, and clears it by tapping the chosen
   await expect(card.locator('.warmth-value')).toHaveText('Not set')
 })
 
-test('in one column the colder directions come first and the warmest last; side by side they keep their places', async ({ page }) => {
+test('keeps the directions in the same order at every width, whatever their warmth', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1000 })
   await page.goto('/')
   const order = () => page.locator('.cluster-open').allInnerTexts()
+  const original = ['Understand & Express', 'Practical Agency', 'Self-Mastery']
   await page.locator('.cluster-card[data-tone="expression"]').getByRole('radio', { name: '9, Very Warm' }).click()
   await page.locator('.cluster-card[data-tone="freedom"]').getByRole('radio', { name: '1, Cold' }).click()
   await page.locator('.cluster-card[data-tone="mastery"]').getByRole('radio', { name: '5, Alive' }).click()
-  expect(await order()).toEqual(['Understand & Express', 'Practical Agency', 'Self-Mastery'])
+  expect(await order()).toEqual(original)
   expect(await page.locator('.cluster-grid').evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length)).toBe(3)
 
-  await page.setViewportSize({ width: 390, height: 900 })
-  await expect.poll(order).toEqual(['Practical Agency', 'Self-Mastery', 'Understand & Express'])
-  const tops = await page.locator('.cluster-card').evaluateAll((cards) => cards.map((card) => card.getBoundingClientRect().top))
-  expect(tops).toEqual([...tops].sort((left, right) => left - right)) // the DOM order is the visual order
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-
+  for (const width of [390, 700, 900]) {
+    await page.setViewportSize({ width, height: 900 })
+    await expect.poll(() => page.locator('.cluster-grid').evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length)).toBe(1)
+    expect(await order()).toEqual(original)
+    const tops = await page.locator('.cluster-card').evaluateAll((cards) => cards.map((card) => card.getBoundingClientRect().top))
+    expect(tops).toEqual([...tops].sort((left, right) => left - right)) // one column, top to bottom, in that order
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  }
   await page.setViewportSize({ width: 1280, height: 900 })
-  await expect.poll(order).toEqual(['Understand & Express', 'Practical Agency', 'Self-Mastery'])
+  expect(await order()).toEqual(original)
+  await page.reload()
+  expect(await order()).toEqual(original)
 })
 
 test('shows the warmth in the Orbit too, and lets the owner set it under the diagram', async ({ page }) => {

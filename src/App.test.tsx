@@ -436,18 +436,19 @@ describe('Soul compass', () => {
     await waitFor(() => expect(card()).not.toHaveAttribute('data-warm'))
   })
 
-  it('reorders the stacked directions as the values change, the colder ones first', async () => {
+  it('never moves a direction card when its warmth changes, in one column or side by side', async () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
     render(<App />)
     await screen.findByRole('heading', { name: 'Soul' })
     const titles = () => [...document.querySelectorAll('.cluster-open')].map((button) => button.textContent)
-    expect(titles()).toEqual(['Understand & Express', 'Practical Agency', 'Self-Mastery'])
+    const original = ['Understand & Express', 'Practical Agency', 'Self-Mastery']
+    expect(titles()).toEqual(original)
     fireEvent.click(within(document.querySelector('.cluster-card[data-tone="expression"]') as HTMLElement).getByRole('radio', { name: '10, Very Warm' }))
-    await waitFor(() => expect(titles()).toEqual(['Practical Agency', 'Self-Mastery', 'Understand & Express']))
-    fireEvent.click(within(document.querySelector('.cluster-card[data-tone="mastery"]') as HTMLElement).getByRole('radio', { name: '10, Very Warm' }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
+    fireEvent.click(within(document.querySelector('.cluster-card[data-tone="freedom"]') as HTMLElement).getByRole('radio', { name: '0, Cold' }))
     await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(2))
-    // equal values keep the order the directions have side by side
-    await waitFor(() => expect(titles()).toEqual(['Practical Agency', 'Understand & Express', 'Self-Mastery']))
+    await waitFor(() => expect(document.querySelector('.cluster-card[data-tone="freedom"]')).toHaveAttribute('data-warm'))
+    expect(titles()).toEqual(original)
     vi.unstubAllGlobals()
   })
 
