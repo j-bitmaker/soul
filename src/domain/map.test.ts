@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createSeedMap } from './seed'
+import { GOAL_COLORS } from './types'
 import { activeIds, queuedIds } from './frontier'
 import { exportMap } from './validation'
 import {
@@ -180,6 +181,42 @@ describe('goal map', () => {
     for (const warmth of [11, -1, 2.5, Number.NaN, Infinity]) {
       expect(() => setNodeDetails(map, 'mastery', { warmth })).toThrow(/whole number from 0 to 10/i)
     }
+  })
+
+  it('tags a goal with one of the ten colours, changes it, and clears it without touching anything else', () => {
+    const base = createSeedMap()
+    let map = setNodeDetails(base, 'launch-blog', { color: 'teal' })
+    expect(map.nodes['launch-blog'].color).toBe('teal')
+    expect(map.nodes['launch-blog'].title).toBe(base.nodes['launch-blog'].title)
+    expect(() => exportMap(map)).not.toThrow()
+    map = setNodeDetails(map, 'launch-blog', { labels: [{ id: 'one', text: 'Now' }] })
+    expect(map.nodes['launch-blog'].color).toBe('teal')
+    for (const color of GOAL_COLORS) expect(setNodeDetails(map, 'launch-blog', { color }).nodes['launch-blog'].color).toBe(color)
+    map = setNodeDetails(map, 'launch-blog', { color: null })
+    expect('color' in map.nodes['launch-blog']).toBe(false)
+    expect(map.nodes['launch-blog'].labels).toEqual([{ id: 'one', text: 'Now' }])
+    expect(base.nodes['launch-blog'].color).toBeUndefined()
+  })
+
+  it('refuses a colour on Soul or a direction, and any colour that is not in the palette', () => {
+    const map = createSeedMap()
+    expect(() => setNodeDetails(map, 'create', { color: 'red' })).toThrow(/only goals/i)
+    expect(() => setNodeDetails(map, 'soul', { color: 'red' })).toThrow(/permanent/i)
+    expect(() => setNodeDetails(map, 'launch-blog', { color: 'magenta' as never })).toThrow(/unknown color/i)
+  })
+
+  it('keeps a goal\'s colour when it moves, is archived and restored, and merges', () => {
+    let map = setNodeDetails(createSeedMap(), 'launch-blog', { color: 'blue' })
+    map = setNodeDetails(map, 'english-c1', { color: 'gold' })
+    expect(moveGoal(map, 'launch-blog', 'create').nodes['launch-blog'].color).toBe('blue')
+    expect(restoreGoal(archiveGoal(map, 'launch-blog'), 'launch-blog').nodes['launch-blog'].color).toBe('blue')
+    // the target keeps its own colour; with none it takes the other goal's; with neither there is no colour key
+    expect(mergeGoals(map, 'launch-blog', 'english-c1').nodes['english-c1'].color).toBe('gold')
+    const plain = setNodeDetails(map, 'english-c1', { color: null })
+    expect(mergeGoals(plain, 'launch-blog', 'english-c1').nodes['english-c1'].color).toBe('blue')
+    const none = createSeedMap()
+    expect('color' in mergeGoals(none, 'launch-blog', 'english-c1').nodes['english-c1']).toBe(false)
+    expect(() => exportMap(mergeGoals(map, 'launch-blog', 'english-c1'))).not.toThrow()
   })
 
   it('lets Soul carry labels but nothing else', () => {

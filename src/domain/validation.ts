@@ -1,6 +1,6 @@
 import { fromLegacyOrder } from './frontier'
 import type { GoalMap } from './types'
-import { CLUSTER_IDS, MAX_ACTIVE, ROOT_ID, WARMTH_MAX } from './types'
+import { CLUSTER_IDS, GOAL_COLORS, MAX_ACTIVE, ROOT_ID, WARMTH_MAX } from './types'
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid map object')
@@ -27,7 +27,7 @@ function optionalText(value: unknown, name: string): void {
 function validateNode(id: string, value: unknown, ids: Set<string>): void {
   const node = object(value)
   knownFields(node, ['id', 'title', 'parentId', 'childrenIds', 'visibleChildIds', 'secondaryIds',
-    'description', 'current', 'target', 'milestones', 'labels', 'reminders', 'note', 'archived', 'warmth'])
+    'description', 'current', 'target', 'milestones', 'labels', 'reminders', 'note', 'archived', 'warmth', 'color'])
   if (node.id !== id || typeof node.title !== 'string' || !node.title.trim()) {
     throw new Error(`Invalid node ${id}`)
   }
@@ -50,6 +50,10 @@ function validateNode(id: string, value: unknown, ids: Set<string>): void {
   if (node.warmth !== undefined && (!CLUSTER_IDS.includes(id as typeof CLUSTER_IDS[number]) || !Number.isInteger(node.warmth) ||
     (node.warmth as number) < 0 || (node.warmth as number) > WARMTH_MAX)) {
     throw new Error(`Invalid warmth for ${id}`)
+  }
+  if (node.color !== undefined && (id === ROOT_ID || CLUSTER_IDS.includes(id as typeof CLUSTER_IDS[number]) ||
+    !(GOAL_COLORS as readonly unknown[]).includes(node.color))) {
+    throw new Error(`Invalid color for ${id}`)
   }
 }
 

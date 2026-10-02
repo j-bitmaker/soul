@@ -242,6 +242,30 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .cluster-goals li:hover .cluster-goal-delete, .cluster-goals li:focus-within .cluster-goal-delete, .cluster-goal-delete:focus-visible { opacity: 1; }
 .cluster-goals.owner .cluster-goal > span:first-child { padding-right: 100px; }
 /* The priority marker takes the dot's place at the end of the row and opens a small menu. */
+/* A goal's colour tag: a dot at the start of its row that opens a palette of ten colours. */
+.color-menu { position: relative; display: inline-flex; }
+.color-trigger { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: none; cursor: pointer; }
+.color-trigger:hover, .color-trigger[aria-expanded="true"] { background: var(--soft); }
+.goal-dot { flex: none; display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--goal, transparent); box-shadow: inset 0 0 0 1px #1f352724; }
+.goal-dot[data-empty] { border: 1.5px dashed #aebdb0; box-shadow: none; opacity: .75; transition: opacity .15s; }
+.cluster-goals li:hover .goal-dot[data-empty], .color-trigger:focus-visible .goal-dot[data-empty], .color-trigger:hover .goal-dot[data-empty] { opacity: 1; border-color: #7d8f82; }
+.cluster-goals li > .row-color { position: absolute; left: 0; top: 8px; }
+.cluster-goals li > .goal-dot.row-color { left: 8px; top: 16px; }
+.cluster-goals.owner .cluster-goal > span:first-child, .cluster-goals.has-colors .cluster-goal > span:first-child { padding-left: 30px; }
+.cluster-goals.owner .cluster-goal-labels:not(.is-empty), .cluster-goals.has-colors .cluster-goal-labels:not(.is-empty) { margin-left: 30px; }
+.color-popover { position: absolute; left: 0; top: 32px; z-index: 40; width: 236px; padding: 10px; display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); border-radius: 14px; background: #fffefa; box-shadow: 0 2px 6px #1f35270f, 0 16px 36px #1f352724; }
+.color-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.color-swatch { min-width: 0; min-height: 38px; display: grid; place-items: center; border: 0; border-radius: 10px; background: none; cursor: pointer; }
+.color-swatch::before { content: ''; width: 24px; height: 24px; border-radius: 50%; background: var(--goal); box-shadow: inset 0 0 0 1px #00000014; transition: transform .12s; }
+.color-swatch:hover { background: var(--soft); }
+.color-swatch:hover::before { transform: scale(1.08); }
+.color-swatch[aria-pressed="true"]::before { box-shadow: 0 0 0 2px #fffefa, 0 0 0 4px var(--goal); }
+.color-swatch:focus-visible, .color-clear:focus-visible { outline: 2px solid var(--forest); outline-offset: -2px; }
+.color-clear { align-self: stretch; min-height: 34px; border: 0; border-radius: 9px; background: none; color: var(--muted); font-size: 12px; font-weight: 650; cursor: pointer; }
+.color-clear:hover:not(:disabled) { background: var(--soft); color: var(--ink); }
+.color-clear:disabled { opacity: .45; cursor: default; }
+.kicker-color { margin: -8px 0 -8px -2px; }
+.goal-row[data-color] { border-left: 4px solid var(--goal); padding-left: 14px; } /* the band is 3px wider than the usual border: titles stay aligned */
 .priority { position: absolute; right: 0; top: 8px; }
 .priority-marker { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: none; cursor: pointer; }
 .priority-marker:hover, .priority-marker[aria-expanded="true"] { background: var(--soft); }

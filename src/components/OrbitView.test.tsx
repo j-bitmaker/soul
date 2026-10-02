@@ -178,11 +178,11 @@ describe('OrbitView and warmth', () => {
     expect(document.querySelectorAll('.orbit-warmth .warmth-name')).toHaveLength(3)
   })
 
-  it('lists the panel colder first in one column, a direction with no value counting as neutral', () => {
+  it('keeps the panel in the same order at every width, whatever the warmth', () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
     render(<OrbitView map={warm()} onSelect={vi.fn()} canEdit />)
     expect([...document.querySelectorAll('.orbit-warmth-title')].map((title) => title.textContent))
-      .toEqual(['Understand & Express', 'Self-Mastery', 'Practical Agency'])
+      .toEqual(['Understand & Express', 'Practical Agency', 'Self-Mastery'])
     vi.unstubAllGlobals()
   })
 })

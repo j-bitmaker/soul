@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createSeedMap } from './seed'
+import { GOAL_COLORS } from './types'
 import { exportMap, migrateMap, parseMap } from './validation'
 
 function legacyMap(): Record<string, unknown> {
@@ -98,6 +99,28 @@ describe('map import and export', () => {
       const map = createSeedMap() as unknown as { nodes: Record<string, Record<string, unknown>> }
       map.nodes[id].warmth = 5
       expect(() => parseMap(JSON.stringify(map))).toThrow(/warmth/i)
+    }
+  })
+
+  it('accepts every palette colour on a goal and keeps it through export and import', () => {
+    for (const color of GOAL_COLORS) {
+      const map = createSeedMap()
+      map.nodes['launch-blog'].color = color
+      expect(parseMap(exportMap(map)).nodes['launch-blog'].color).toBe(color)
+    }
+    expect(parseMap(exportMap(createSeedMap())).nodes['launch-blog'].color).toBeUndefined()
+  })
+
+  it('rejects a colour that is not in the palette, or sits on Soul or a direction', () => {
+    for (const color of ['magenta', '', 3, null, '#ff0000', 'Red']) {
+      const map = createSeedMap() as unknown as { nodes: Record<string, Record<string, unknown>> }
+      map.nodes['launch-blog'].color = color
+      expect(() => parseMap(JSON.stringify(map))).toThrow(/color/i)
+    }
+    for (const id of ['soul', 'understand', 'create', 'mastery']) {
+      const map = createSeedMap() as unknown as { nodes: Record<string, Record<string, unknown>> }
+      map.nodes[id].color = 'red'
+      expect(() => parseMap(JSON.stringify(map))).toThrow(/color/i)
     }
   })
 
