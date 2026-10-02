@@ -63,8 +63,9 @@ function mix(hex: string, amount: number, base: readonly [number, number, number
 
 /**
  * The look of a direction with a warmth value, as CSS variables: its colour (`--tone`), the tint of its card
- * (`--tone-wash`), its border colour, the thickness of its top band, and its shadow (a frame and a soft glow for
- * the cold ones, a firmer frame for the cooling ones, and nothing but the usual quiet shadow for the rest).
+ * (`--tone-wash`), its border colour, the thickness of its top band, and its shadow: a strong frame and a soft glow
+ * for the cold ones; one firmer frame, in the direction's own colour, for the cooling, alive and warm ones (so they
+ * all look outlined alike); and nothing but the usual quiet shadow for the very warm ones, which recede.
  * Nothing at all for a direction with no value, which keeps its own colour.
  */
 export function warmthVars(value: number | undefined): CSSProperties {
@@ -73,12 +74,16 @@ export function warmthVars(value: number | undefined): CSSProperties {
   const colour = warmthColor(step)
   const [red, green, blue] = channels(colour)
   const rgba = (alpha: number): string => `rgba(${red}, ${green}, ${blue}, ${alpha})`
+  /** The firmer frame: the border tinted with the colour, a thin outer ring, and a 4px top band. */
+  const framed = (wash: string): { wash: string; line: string; band: number; shadow: string } => ({
+    wash, line: mix(colour, 0.55, LINE), band: 4, shadow: `0 0 0 1px ${rgba(0.45)}, ${QUIET_SHADOW}`,
+  })
   const look = {
     cold: { wash: mix(colour, 0.05 + (2 - step) * 0.015, WHITE), line: colour, band: 5,
       shadow: `0 0 0 2px ${rgba(0.9)}, 0 10px 30px ${rgba(0.14 + (2 - step) * 0.03)}, 0 1px 2px #1f35270a` },
-    cooling: { wash: mix(colour, 0.035, WHITE), line: mix(colour, 0.55, LINE), band: 4, shadow: `0 0 0 1px ${rgba(0.45)}, ${QUIET_SHADOW}` },
-    alive: { wash: mix(colour, 0.025, WHITE), line: LINE_HEX, band: 3, shadow: QUIET_SHADOW },
-    warm: { wash: mix(colour, 0.02, WHITE), line: LINE_HEX, band: 3, shadow: QUIET_SHADOW },
+    cooling: framed(mix(colour, 0.035, WHITE)),
+    alive: framed(mix(colour, 0.025, WHITE)),
+    warm: framed(mix(colour, 0.02, WHITE)),
     'very-warm': { wash: '#ffffff', line: LINE_HEX, band: 2, shadow: QUIET_SHADOW },
   }[warmthBand(step)]
   return {
