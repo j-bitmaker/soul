@@ -76,21 +76,33 @@ describe('warmthVars', () => {
     expect(away(coldest['--tone-wash'])).toBeGreaterThan(away(cold['--tone-wash']))
   })
 
-  it('gives the cooling ones a firmer frame than the rest, but a lighter one than the cold', () => {
+  it('gives the cooling ones a firmer frame than the very warm, but a lighter one than the cold', () => {
     const cooling = vars(4)
     expect(cooling['--tone-band']).toBe('4px')
     expect(cooling['--tone-shadow']).toMatch(/^0 0 0 1px rgba\(156, 105, 17, 0\.45\), 0 1px 2px/)
     expect(cooling['--tone-line']).not.toBe(WARMTH_COLORS[4])
     expect(cooling['--tone-line']).not.toBe('#dbe3dc') // a touch of the colour in the border
+    expect(vars(0)['--tone-shadow']).toMatch(/^0 0 0 2px rgba\(/) // the cold frame is thicker
   })
 
-  it('leaves the alive and warm ones quiet: the usual border and shadow, and a very light tint', () => {
-    for (const value of [5, 6, 7]) {
-      expect(vars(value)['--tone-line']).toBe('#dbe3dc')
-      expect(vars(value)['--tone-band']).toBe('3px')
-      expect(vars(value)['--tone-shadow']).not.toMatch(/0 0 0 \dpx/)
-      expect(vars(value)['--tone-shadow']).not.toContain('rgba')
+  it('gives the cooling, alive, and warm ones the same firmer frame, each in its own colour, with no glow', () => {
+    const ring = (value: number): string => (vars(value)['--tone-shadow'].match(/^0 0 0 1px (rgba\([^)]+\))/) ?? [])[1]
+    for (const value of [3, 4, 5, 6, 7]) {
+      const [red, green, blue] = channels(WARMTH_COLORS[value])
+      expect(ring(value)).toBe(`rgba(${red}, ${green}, ${blue}, 0.45)`) // a thin ring in the value's own colour
+      expect(vars(value)['--tone-band']).toBe('4px')
+      expect(vars(value)['--tone-line']).not.toBe('#dbe3dc') // the border takes on the colour
+      expect(vars(value)['--tone-line']).not.toBe(WARMTH_COLORS[value]) // but softly
+      expect(vars(value)['--tone-shadow']).not.toContain('30px rgba') // no glow
+      expect(vars(value)['--tone-shadow']).toContain('0 12px 30px #1f352706') // only the usual quiet shadow
     }
+    // the same recipe: the border is the colour 55 % of the way from the pale line
+    const alive = channels(vars(5)['--tone-line'] as string)
+    const pale = channels('#dbe3dc')
+    const tone = channels(WARMTH_COLORS[5])
+    alive.forEach((part, at) => expect(Math.abs(part - Math.round(pale[at] * 0.45 + tone[at] * 0.55))).toBeLessThanOrEqual(1))
+    // the very light tints stay very light
+    for (const value of [5, 6, 7]) expect(channels(vars(value)['--tone-wash']).every((part) => part >= 240)).toBe(true)
   })
 
   it('gives the very warm ones no frame and no glow at all, and no tint', () => {
@@ -105,6 +117,7 @@ describe('warmthVars', () => {
 
   it('grows quieter with every step up: the band never thickens as the value rises', () => {
     const bands = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => parseInt(vars(value)['--tone-band'], 10))
+    expect(bands).toEqual([5, 5, 5, 4, 4, 4, 4, 4, 2, 2, 2])
     expect(bands).toEqual([...bands].sort((left, right) => right - left))
   })
 })

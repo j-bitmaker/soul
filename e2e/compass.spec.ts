@@ -805,3 +805,64 @@ test('keeps the card footer inside the screen on phones, with the field above th
     expect(plus.height).toBeGreaterThanOrEqual(28)
   }
 })
+
+test('the cards at Cooling, Alive and Warm share one outline in their own colour, and Very Warm stays plain', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1000 })
+  await page.goto('/')
+  const card = (tone: string) => page.locator(`.cluster-card[data-tone="${tone}"]`)
+  await card('expression').getByRole('radio', { name: '4, Cooling' }).click()
+  await card('freedom').getByRole('radio', { name: '6, Warm' }).click()
+  await card('mastery').getByRole('radio', { name: '5, Alive' }).click()
+  await page.mouse.move(2, 2)
+  await page.waitForTimeout(600)
+
+  const look = (locator: ReturnType<typeof card>) => locator.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { top: style.borderTopColor, side: style.borderLeftColor, bottom: style.borderBottomColor, band: parseFloat(style.borderTopWidth),
+      edge: parseFloat(style.borderLeftWidth), shadow: style.boxShadow }
+  })
+  // the outline the owner asked for: the border is the colour 55 % of the way from the pale line, with a thin ring and a 4px band
+  const tinted = (hex: string): string => {
+    const [red, green, blue] = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16))
+    const mixed = [red, green, blue].map((part, at) => Math.round([219, 227, 220][at] * 0.45 + part * 0.55))
+    return `rgb(${mixed.join(', ')})`
+  }
+  const expectations: [string, number][] = [['expression', 4], ['freedom', 6], ['mastery', 5]]
+  const looks = []
+  for (const [tone, value] of expectations) {
+    const result = await look(card(tone))
+    looks.push(result)
+    expect(result.top).toBe(rgb(COLOURS[value]))
+    expect(result.side).toBe(tinted(COLOURS[value]))
+    expect(result.bottom).toBe(tinted(COLOURS[value]))
+    expect(result.side).not.toBe('rgb(219, 227, 220)') // no longer the pale default
+    expect(result.band).toBe(4)
+    expect(result.edge).toBe(1)
+    const [red, green, blue] = [1, 3, 5].map((at) => parseInt(COLOURS[value].slice(at, at + 2), 16))
+    expect(result.shadow).toContain(`rgba(${red}, ${green}, ${blue}, 0.45) 0px 0px 0px 1px`)
+    expect(result.shadow).not.toContain('0px 10px 30px') // no glow
+  }
+  // all three are outlined the same way (same widths), only the colour differs
+  expect(new Set(looks.map((result) => `${result.band}/${result.edge}`)).size).toBe(1)
+  expect(new Set(looks.map((result) => result.side)).size).toBe(3)
+
+  // Very Warm keeps the plain pale border and a thin band
+  await card('freedom').getByRole('radio', { name: '9, Very Warm' }).click()
+  await page.mouse.move(2, 2)
+  await page.waitForTimeout(600)
+  const plain = await look(card('freedom'))
+  expect(plain.side).toBe('rgb(219, 227, 220)')
+  expect(plain.band).toBe(2)
+  expect(plain.shadow).not.toMatch(/0px 0px 0px [1-9]px/)
+
+  // the Orbit nodes follow
+  await page.getByRole('button', { name: 'Orbit' }).click()
+  await page.mouse.move(2, 2)
+  await page.waitForTimeout(600)
+  const node = await page.locator('.orbit-node', { hasText: 'Self-Mastery' }).evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { side: style.borderLeftColor, band: parseFloat(style.borderTopWidth) }
+  })
+  expect(node.side).toBe(tinted(COLOURS[5]))
+  expect(node.band).toBe(4)
+})
