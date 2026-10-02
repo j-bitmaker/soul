@@ -61,13 +61,15 @@ function LabelInput({ initial = '', label, placeholder, onCommit, onCancel }: {
  * Labels the owner can change where they stand: tap a label to rename it, × removes it,
  * "+ Label" adds one (Enter adds and keeps the field open for the next). Every change is saved at once.
  */
-export function EditableLabels({ labels, disabled, subject, compact, className = '', onChange }: {
+export function EditableLabels({ labels, disabled, subject, compact, iconOnly, className = '', onChange }: {
   labels: Label[]
   disabled?: boolean
   /** Whose labels these are, so that several editors on one page have distinct names for assistive technology. */
   subject?: string
   /** Only a small "+" instead of "+ Label", for tight places such as a goal in a card. */
   compact?: boolean
+  /** A "+" without the word, at the size of a label, for a place that has room (a direction's footer). */
+  iconOnly?: boolean
   className?: string
   onChange: (labels: Label[]) => Saved
 }) {
@@ -99,9 +101,9 @@ export function EditableLabels({ labels, disabled, subject, compact, className =
           if (value) save([...labels, { id: crypto.randomUUID(), text: value }])
           setAdding(more && value ? adding + 1 : null)
         }} />
-      : <button type="button" className={`label-add${compact ? ' compact' : ''}`} disabled={disabled} title="Add label"
+      : <button type="button" className={`label-add${compact ? ' compact' : ''}${iconOnly ? ' icon' : ''}`} disabled={disabled} title="Add label"
         aria-label={subject ? `Add label to ${subject}` : 'Add label'} onClick={() => setAdding(0)}>
-        <Plus aria-hidden="true" />{!compact && ' Label'}
+        <Plus aria-hidden="true" />{!compact && !iconOnly && ' Label'}
       </button>}
   </span>
 }

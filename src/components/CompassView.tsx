@@ -92,9 +92,9 @@ function Header(props: CompassViewProps) {
 }
 
 /** A goal's or direction's labels: editable where they stand for the owner, plain pills for everyone else. */
-function Labels({ props, node, className = '', compact }: { props: CompassViewProps; node: GoalNode; className?: string; compact?: boolean }) {
+function Labels({ props, node, className = '', compact, iconOnly }: { props: CompassViewProps; node: GoalNode; className?: string; compact?: boolean; iconOnly?: boolean }) {
   return props.canEdit
-    ? <EditableLabels labels={node.labels ?? []} subject={node.title} compact={compact} disabled={props.busy}
+    ? <EditableLabels labels={node.labels ?? []} subject={node.title} compact={compact} iconOnly={iconOnly} disabled={props.busy}
       className={`${className}${compact && !node.labels?.length ? ' is-empty' : ''}`.trim()}
       onChange={(labels) => props.onEditNode(node.id, { labels })} />
     : <LabelPills labels={node.labels} className={className} />
@@ -137,9 +137,9 @@ function ClusterCard({ node, props }: { node: GoalNode; props: CompassViewProps 
       {(owner || goal.labels?.length) ? <Labels props={props} node={goal} className="cluster-goal-labels" compact /> : null}
       </li>)}</ul> : <p className="cluster-empty">{children.length ? 'Nothing active right now' : 'No goals yet'}</p>}
     {(owner || node.labels?.length) ? <div className="cluster-foot">
-      <Labels props={props} node={node} className="cluster-labels" />
       {owner && <InlineAdd label={`New goal in ${node.title}`} action={`Add goal to ${node.title}`} placeholder="Add a goal…" disabled={props.busy}
         onAdd={(title) => props.onAddGoal(node.id, title)} />}
+      <Labels props={props} node={node} className="cluster-labels" iconOnly />
     </div> : null}
   </article>
 }

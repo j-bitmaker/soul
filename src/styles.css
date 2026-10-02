@@ -227,10 +227,23 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .label-list { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .label-pill { max-width: 100%; padding: 4px 8px; border: 1px solid #ccd7cc; border-radius: 8px; color: #41564a; text-transform: uppercase; letter-spacing: .06em; font-size: 11px; font-weight: 750; line-height: 1.3; overflow-wrap: anywhere; }
 .cluster-foot { margin-top: auto; padding-top: 18px; min-width: 0; }
-.cluster-foot .inline-add { margin-top: 14px; }
+.cluster-foot .inline-add { margin-top: 0; }
 .cluster-foot .inline-add input { font-size: 13px; }
+.cluster-foot .cluster-labels { margin-top: 14px; }
+/* In a card the add buttons are a soft forest green and the labels a soft indigo, so they read as different things. */
+.cluster-card .label-pill { border-color: #cecbee; background: #ecebf8; color: #43408f; }
+.cluster-card .label-remove { color: #5b57a8; }
+.cluster-card .label-remove:hover { background: #dcd9f2; color: #2f2c78; }
+.cluster-card .label-input { border-color: #5b57a8; }
+.cluster-card .label-add, .cluster-card .inline-add .icon-button { border: 1px solid #b4cdbf; background: #e3efe8; color: var(--forest); transition: background-color .15s, color .15s, border-color .15s, opacity .15s; }
+.cluster-card .label-add:hover:not(:disabled), .cluster-card .label-add:focus-visible, .cluster-card .inline-add .icon-button:hover:not(:disabled), .cluster-card .inline-add .icon-button:focus-visible { border-color: var(--forest); background: var(--forest); color: #fff; }
+.cluster-card .inline-add .icon-button:disabled { opacity: .6; }
+/* a field with text in it: the button is ready, so it turns solid */
+.cluster-card .inline-add .icon-button:not(:disabled) { border-color: var(--forest); background: var(--forest); color: #fff; }
+.label-add.icon { min-width: 30px; min-height: 30px; justify-content: center; padding: 0; border-radius: 999px; }
+.label-add.icon svg { width: 16px; height: 16px; }
 .cluster-goal-labels { margin: -3px 0 10px; }
-.label-add.compact { min-width: 28px; justify-content: center; padding: 3px 7px; opacity: .55; transition: opacity .15s; }
+.label-add.compact { min-width: 28px; justify-content: center; padding: 3px 7px; opacity: .8; transition: opacity .15s; }
 .cluster-goals li:hover .label-add.compact, .cluster-goals li:focus-within .label-add.compact, .label-add.compact:focus-visible { opacity: 1; }
 @media (hover: none) { .label-add.compact { opacity: .85; } }
 /* With no labels yet, the small "+" sits beside the title instead of taking a line of its own. */

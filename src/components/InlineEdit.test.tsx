@@ -53,6 +53,30 @@ describe('EditableLabels', () => {
     expect(onChange).toHaveBeenCalledTimes(2)
   })
 
+  it('shows the word "Label" on the add button, unless asked for the icon alone, and tight spots drop it too', () => {
+    const view = render(<EditableLabels labels={labels} onChange={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Add label' })).toHaveTextContent('Label')
+    view.rerender(<EditableLabels labels={labels} compact onChange={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Add label' })).toHaveTextContent(/^$/)
+    expect(screen.getByRole('button', { name: 'Add label' })).toHaveClass('compact')
+    view.rerender(<EditableLabels labels={labels} iconOnly onChange={vi.fn()} />)
+    const button = screen.getByRole('button', { name: 'Add label' })
+    expect(button).toHaveTextContent(/^$/)
+    expect(button).toHaveClass('label-add', 'icon')
+    expect(button).not.toHaveClass('compact')
+    expect(button).toHaveAttribute('title', 'Add label')
+    expect(button.querySelector('svg')).not.toBeNull()
+  })
+
+  it('still adds a label from the icon-only button, under the name of its subject', () => {
+    const onChange = vi.fn()
+    render(<EditableLabels labels={labels} iconOnly subject="Understand & Express" onChange={onChange} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Add label to Understand & Express' }))
+    fireEvent.change(screen.getByLabelText('New label for Understand & Express'), { target: { value: 'Pray' } })
+    fireEvent.keyDown(screen.getByLabelText('New label for Understand & Express'), { key: 'Enter' })
+    expect(onChange).toHaveBeenLastCalledWith([...labels, { id: expect.any(String), text: 'Pray' }])
+  })
+
   it('renames on Enter, removes a label emptied by renaming, and leaves unchanged text alone', () => {
     const onChange = vi.fn()
     render(<EditableLabels labels={labels} onChange={onChange} />)

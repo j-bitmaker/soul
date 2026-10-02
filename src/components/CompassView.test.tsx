@@ -340,6 +340,40 @@ describe('CompassView', () => {
     expect(screen.queryByRole('button', { name: /^Color of Understand/ })).not.toBeInTheDocument()
   })
 
+  it('puts the "Add a goal" field above the direction\'s labels in the card\'s footer, and the add-label button has no word', () => {
+    render(<CompassView {...props()} />)
+    for (const card of document.querySelectorAll<HTMLElement>('.cluster-card')) {
+      const foot = card.querySelector('.cluster-foot') as HTMLElement
+      expect([...foot.children].map((child) => child.className.split(' ')[0])).toEqual(['inline-add', 'label-list'])
+      const add = within(foot).getByRole('button', { name: /^Add label to / })
+      expect(add).toHaveTextContent(/^$/) // just the plus
+      expect(add).toHaveClass('label-add', 'icon')
+    }
+    const understand = document.querySelector('.cluster-card[data-tone="expression"] .cluster-foot') as HTMLElement
+    expect(understand.querySelector('.cluster-labels')).toHaveTextContent('Read Bible · Daily')
+    expect(understand.querySelector('.inline-add')!.compareDocumentPosition(understand.querySelector('.cluster-labels')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(understand).getByRole('button', { name: 'Add goal to Understand & Express' })).toBeVisible()
+  })
+
+  it('keeps the word "Label" where there is room: on Soul and on a goal\'s page', () => {
+    const rendered = render(<CompassView {...props()} />)
+    expect(screen.getByRole('button', { name: 'Add label to Soul' })).toHaveTextContent('Label')
+    rendered.rerender(<CompassView {...props()} selectedId="english-c1" />)
+    expect(screen.getByRole('button', { name: 'Add label' })).toHaveTextContent('Label')
+  })
+
+  it('shows visitors the labels in the card as plain pills, with no field and no button', () => {
+    const rendered = render(<CompassView {...props()} canEdit={false} />)
+    const foot = document.querySelector('.cluster-card[data-tone="expression"] .cluster-foot') as HTMLElement
+    expect([...foot.children].map((child) => child.className.split(' ')[0])).toEqual(['label-list'])
+    expect(foot.querySelector('.label-pill')).toHaveTextContent('Read Bible · Daily')
+    expect(within(foot).queryByRole('button')).not.toBeInTheDocument()
+    expect(foot.querySelector('input')).toBeNull()
+    // the other cards have no footer at all
+    expect(document.querySelector('.cluster-card[data-tone="freedom"] .cluster-foot')).toBeNull()
+    rendered.unmount()
+  })
+
   it('says so when every goal of a direction is queued', () => {
     const map = structuredClone(createSeedMap())
     map.nodes.mastery.childrenIds = ['attention-focus']

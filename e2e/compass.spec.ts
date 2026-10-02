@@ -694,3 +694,114 @@ test('keeps the colour dots and their palette inside the screen on phones, clear
     await page.keyboard.press('Escape')
   }
 })
+
+const channelsOf = (colour: string): number[] => colour.match(/[\d.]+/g)!.slice(0, 3).map(Number)
+function contrastBetween(foreground: string, background: string): number {
+  const luminance = (colour: string): number => {
+    const [red, green, blue] = channelsOf(colour).map((part) => {
+      const value = part / 255
+      return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+    })
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+  }
+  const [light, dark] = [luminance(foreground), luminance(background)].sort((left, right) => right - left)
+  return (light + 0.05) / (dark + 0.05)
+}
+
+test('the footer of a direction card has the field above the labels, word-free green buttons, and indigo labels', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1000 })
+  await page.goto('/')
+  const card = page.locator('.cluster-card[data-tone="expression"]')
+  const field = card.getByLabel('New goal in Understand & Express')
+  const pill = card.locator('.cluster-labels .label-pill').first()
+  const addLabel = card.getByRole('button', { name: 'Add label to Understand & Express' })
+  const addGoal = card.getByRole('button', { name: 'Add goal to Understand & Express' })
+
+  // the field is above the labels, and the add-label button sits on the labels' row
+  const fieldBox = (await field.boundingBox())!
+  const pillBox = (await pill.boundingBox())!
+  const plusBox = (await addLabel.boundingBox())!
+  expect(fieldBox.y + fieldBox.height).toBeLessThan(pillBox.y)
+  expect(Math.abs(plusBox.y + plusBox.height / 2 - (pillBox.y + pillBox.height / 2))).toBeLessThan(10)
+  expect(plusBox.x).toBeGreaterThan(pillBox.x + pillBox.width)
+
+  // no word on the button, a visible green fill, and a label colour that is clearly another colour
+  await expect(addLabel).toHaveText('')
+  const look = (locator: typeof pill) => locator.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { fill: style.backgroundColor, text: style.color, border: style.borderTopColor }
+  })
+  const buttonLook = await look(addLabel)
+  const pillLook = await look(pill)
+  expect(buttonLook.fill).toBe('rgb(227, 239, 232)')
+  expect(pillLook.fill).toBe('rgb(236, 235, 248)')
+  const [br, bg, bb] = channelsOf(buttonLook.fill)
+  const [pr, pg, pb] = channelsOf(pillLook.fill)
+  expect(Math.abs(bg - br)).toBeGreaterThan(8) // green: more green than red
+  expect(pb).toBeGreaterThan(pg + 8) // indigo: more blue than green
+  expect(pr).not.toBe(br)
+  expect(contrastBetween(pillLook.text, pillLook.fill)).toBeGreaterThanOrEqual(4.5)
+  expect(contrastBetween(buttonLook.text, buttonLook.fill)).toBeGreaterThanOrEqual(4.5)
+  expect(bb).toBeGreaterThan(0)
+
+  // the add-goal plus is muted while the field is empty and turns solid when there is text to add
+  await expect(addGoal).toBeDisabled()
+  expect((await look(addGoal)).fill).toBe('rgb(227, 239, 232)')
+  await field.fill('Walk every day')
+  await expect(addGoal).toBeEnabled()
+  await page.mouse.move(2, 2)
+  await page.waitForTimeout(300)
+  expect((await look(addGoal)).fill).toBe('rgb(47, 102, 85)')
+  await field.fill('')
+
+  // hovering the add-label button turns it solid
+  await addLabel.hover()
+  await page.waitForTimeout(300)
+  expect((await look(addLabel)).fill).toBe('rgb(47, 102, 85)')
+  await page.mouse.move(2, 2)
+
+  // it still works: add, rename, remove
+  await addLabel.click()
+  await page.getByRole('textbox', { name: 'New label for Understand & Express' }).fill('Pray')
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Escape')
+  await expect(card.locator('.cluster-labels .label-pill', { hasText: 'Pray' })).toBeVisible()
+  await card.getByRole('button', { name: 'Remove label Pray from Understand & Express' }).click()
+  await expect(card.locator('.cluster-labels .label-pill', { hasText: 'Pray' })).toHaveCount(0)
+
+  // the labels of goals in the card are indigo too; Soul keeps its word
+  await card.getByRole('button', { name: 'Add label to Launch Blog' }).click()
+  await page.getByRole('textbox', { name: 'New label for Launch Blog' }).fill('Weekly')
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Escape')
+  const goalPill = card.locator('.cluster-goal-labels .label-pill', { hasText: 'Weekly' })
+  expect((await look(goalPill)).fill).toBe('rgb(236, 235, 248)')
+  await expect(page.locator('.orientation').getByRole('button', { name: 'Add label to Soul' })).toContainText('Label')
+})
+
+test('keeps the card footer inside the screen on phones, with the field above the labels', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'mobile', 'This test sets its own viewports')
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 800 })
+    await page.goto('/')
+    const card = page.locator('.cluster-card[data-tone="expression"]')
+    await card.getByLabel('New goal in Understand & Express').fill('A rather long goal title that has to fit on a narrow screen')
+    for (const text of ['One', 'Another label', 'A long label that may wrap']) {
+      await card.getByRole('button', { name: 'Add label to Understand & Express' }).click()
+      await page.getByRole('textbox', { name: 'New label for Understand & Express' }).fill(text)
+      await page.keyboard.press('Enter')
+      await page.keyboard.press('Escape')
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    const foot = (await card.locator('.cluster-foot').boundingBox())!
+    const cardBox = (await card.boundingBox())!
+    expect(foot.x).toBeGreaterThanOrEqual(cardBox.x)
+    expect(foot.x + foot.width).toBeLessThanOrEqual(cardBox.x + cardBox.width)
+    const fieldBox = (await card.getByLabel('New goal in Understand & Express').boundingBox())!
+    const firstPill = (await card.locator('.cluster-labels .label-pill').first().boundingBox())!
+    expect(fieldBox.y + fieldBox.height).toBeLessThan(firstPill.y)
+    const plus = (await card.getByRole('button', { name: 'Add label to Understand & Express' }).boundingBox())!
+    expect(plus.width).toBeGreaterThanOrEqual(28)
+    expect(plus.height).toBeGreaterThanOrEqual(28)
+  }
+})
