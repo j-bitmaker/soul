@@ -219,7 +219,7 @@ test('the owner\'s tools never get in the way of scrolling', async ({ page, cont
   expect(await page.evaluate(() => [...document.querySelectorAll('*')].filter((element) => getComputedStyle(element).touchAction === 'none').length)).toBe(0)
   expect(await page.evaluate(() => [...document.querySelectorAll('.cluster-card *, .orientation *')]
     .filter((element) => ['fixed', 'sticky'].includes(getComputedStyle(element).position)).length)).toBe(0)
-  const buttons = ['Delete Launch Blog', 'Priority of English C1', 'Add label to Launch Blog']
+  const buttons = ['Delete Launch Blog', 'Priority of English C1', 'Add label to Launch Blog', 'Color of Launch Blog']
   const client = testInfo.project.name === 'mobile' ? await context.newCDPSession(page) : null
   for (const name of buttons) {
     await page.evaluate(() => window.scrollTo(0, 0))
@@ -297,7 +297,7 @@ test('keeps the overview inside the screen on phones, with the owner\'s small co
       const range = document.createRange()
       range.selectNodeContents(text)
       const words = [...range.getClientRects()]
-      const buttons = [...row.querySelectorAll('.cluster-goal-delete, .priority-marker, .cluster-goal-labels.is-empty .label-add')]
+      const buttons = [...row.querySelectorAll('.cluster-goal-delete, .priority-marker, .cluster-goal-labels.is-empty .label-add, .color-trigger')]
         .map((button) => button.getBoundingClientRect())
       return words.flatMap((word) => buttons.filter((box) => word.right > box.left + 1 && word.left < box.right - 1
         && word.bottom > box.top + 1 && word.top < box.bottom - 1).map(() => text.textContent))
@@ -593,5 +593,104 @@ test('keeps the warmth meter usable and inside the screen on phones', async ({ p
     const cardBox = (await card.boundingBox())!
     expect(steps[0].left).toBeGreaterThanOrEqual(cardBox.x)
     expect(steps[10].right).toBeLessThanOrEqual(cardBox.x + cardBox.width)
+  }
+})
+
+const TEAL = 'rgb(31, 154, 152)'
+const RED = 'rgb(207, 67, 56)'
+const dotColour = (page: import('@playwright/test').Page, goal: string) =>
+  page.getByRole('button', { name: `Color of ${goal}` }).locator('.goal-dot').evaluate((dot) => {
+    const style = getComputedStyle(dot)
+    return { colour: style.backgroundColor, empty: dot.hasAttribute('data-empty') }
+  })
+
+test('tags a goal with a colour right on the overview in two taps, and shows it on its pages too', async ({ page }) => {
+  await page.goto('/')
+  expect(await dotColour(page, 'Launch Blog')).toMatchObject({ empty: true })
+
+  await page.getByRole('button', { name: 'Color of Launch Blog' }).click()
+  const palette = page.getByRole('group', { name: 'Color of Launch Blog' })
+  await expect(palette.getByRole('button')).toHaveCount(11) // ten colours and "No color"
+  const box = (await palette.boundingBox())!
+  const viewport = page.viewportSize()!
+  expect(box.x).toBeGreaterThanOrEqual(0)
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width)
+  for (const swatch of await palette.locator('.color-swatch').all()) {
+    const target = (await swatch.boundingBox())!
+    expect(target.width).toBeGreaterThanOrEqual(36) // a finger-sized target
+    expect(target.height).toBeGreaterThanOrEqual(36)
+  }
+  await palette.getByRole('button', { name: 'Teal' }).click()
+  await expect(palette).toHaveCount(0)
+  expect(await dotColour(page, 'Launch Blog')).toEqual({ colour: TEAL, empty: false })
+  expect(await dotColour(page, 'English C1')).toMatchObject({ empty: true })
+
+  await page.reload()
+  expect(await dotColour(page, 'Launch Blog')).toEqual({ colour: TEAL, empty: false })
+
+  // the direction's list marks it with a band, and the goal's own page with its dot
+  await page.locator('.cluster-open').first().click()
+  await expect(page.getByRole('heading', { name: 'Understand & Express', level: 1 })).toBeVisible()
+  expect(await page.locator('.goal-row', { hasText: 'Launch Blog' }).evaluate((row) => getComputedStyle(row).borderLeftColor)).toBe(TEAL)
+  await page.getByRole('button', { name: /^Launch Blog/ }).click()
+  await expect(page.getByRole('heading', { name: 'Launch Blog', level: 1 })).toBeVisible()
+  expect(await dotColour(page, 'Launch Blog')).toEqual({ colour: TEAL, empty: false })
+  await page.getByRole('button', { name: 'Color of Launch Blog' }).click()
+  await page.getByRole('button', { name: 'Red', exact: true }).click()
+  expect(await dotColour(page, 'Launch Blog')).toEqual({ colour: RED, empty: false })
+
+  // back on the overview it is red; "No color" puts the quiet ring back
+  await page.getByRole('button', { name: 'Soul, return to overview' }).click()
+  expect(await dotColour(page, 'Launch Blog')).toEqual({ colour: RED, empty: false })
+  await page.getByRole('button', { name: 'Color of Launch Blog' }).click()
+  await page.getByRole('button', { name: 'No color' }).click()
+  expect(await dotColour(page, 'Launch Blog')).toMatchObject({ empty: true })
+  await page.reload()
+  expect(await dotColour(page, 'Launch Blog')).toMatchObject({ empty: true })
+})
+
+test('chooses a colour with the keyboard only', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Color of English C1' }).focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('button', { name: 'Red', exact: true })).toBeFocused()
+  for (let step = 0; step < 4; step += 1) await page.keyboard.press('ArrowRight')
+  await expect(page.getByRole('button', { name: 'Teal', exact: true })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('group', { name: 'Color of English C1' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Color of English C1' })).toBeFocused()
+  expect(await dotColour(page, 'English C1')).toMatchObject({ empty: true })
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
+  expect(await dotColour(page, 'English C1')).toEqual({ colour: 'rgb(47, 128, 200)', empty: false }) // Blue: one row down from Red
+})
+
+test('keeps the colour dots and their palette inside the screen on phones, clear of the titles', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'mobile', 'This test sets its own viewports')
+  for (const width of [320, 360, 390]) {
+    await page.setViewportSize({ width, height: 800 })
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Color of Launch Blog' }).click()
+    await page.getByRole('button', { name: 'Gold', exact: true }).click()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    // the title text starts to the right of the dot's button, in every row
+    const overlaps = await page.evaluate(() => [...document.querySelectorAll('.cluster-goals li')].flatMap((row) => {
+      const text = row.querySelector('.cluster-goal > span:first-child')!.firstChild as Text
+      const range = document.createRange()
+      range.selectNodeContents(text)
+      const trigger = row.querySelector('.color-trigger')!.getBoundingClientRect()
+      return [...range.getClientRects()].filter((word) => word.left < trigger.right - 1).map(() => text.textContent)
+    }))
+    expect(overlaps).toEqual([])
+    // the palette fits, also from the last row of a card
+    const last = page.getByRole('button', { name: 'Color of Material / geographic / legal autonomy' })
+    await last.click()
+    const palette = page.getByRole('group', { name: /^Color of Material/ })
+    const box = (await palette.boundingBox())!
+    expect(box.x).toBeGreaterThanOrEqual(0)
+    expect(box.x + box.width).toBeLessThanOrEqual(width)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.keyboard.press('Escape')
   }
 })

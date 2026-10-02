@@ -452,6 +452,40 @@ describe('Soul compass', () => {
     vi.unstubAllGlobals()
   })
 
+  it('saves a goal\'s colour with two taps right on the overview, shows it, and clears it with a third', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Soul' })
+    const dot = () => screen.getByRole('button', { name: 'Color of Launch Blog' }).querySelector('.goal-dot') as HTMLElement
+    expect(dot()).toHaveAttribute('data-empty')
+    fireEvent.click(screen.getByRole('button', { name: 'Color of Launch Blog' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Teal' }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
+    const saved = mocks.saveMap.mock.calls[0][0]
+    expect(saved.nodes['launch-blog'].color).toBe('teal')
+    expect(saved.nodes['launch-blog'].title).toBe('Launch Blog')
+    expect(saved.nodes['english-c1'].color).toBeUndefined()
+    await waitFor(() => expect(dot()).not.toHaveAttribute('data-empty'))
+    expect(dot().style.getPropertyValue('--goal')).toBe('#1f9a98')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Color of Launch Blog' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Teal' })) // the chosen colour again clears it
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(2))
+    expect('color' in mocks.saveMap.mock.calls[1][0].nodes['launch-blog']).toBe(false)
+    await waitFor(() => expect(dot()).toHaveAttribute('data-empty'))
+  })
+
+  it('keeps a goal\'s colour when the goal is merged away or archived', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Soul' })
+    fireEvent.click(screen.getByRole('button', { name: 'Color of English C1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Gold' }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
+    clickOverviewGoal(/^English C1/)
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
+    await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(2))
+    expect(mocks.saveMap.mock.calls[1][0].nodes['english-c1']).toMatchObject({ archived: true, color: 'gold' })
+  })
+
   it('rejects a stale editor draft after a remote map revision arrives', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Soul' })

@@ -6,6 +6,9 @@ export type FrontierLane = 'active' | 'queue'
 export const MAX_ACTIVE = 5
 /** How alive a direction is: a whole number from 0 (cold, needs attention) to this value (very warm). */
 export const WARMTH_MAX = 10
+/** The colours a goal can be tagged with, by name; the shades themselves live in the UI. */
+export const GOAL_COLORS = ['red', 'orange', 'gold', 'green', 'teal', 'blue', 'indigo', 'violet', 'pink', 'slate'] as const
+export type GoalColor = typeof GOAL_COLORS[number]
 
 export interface Milestone {
   id: string
@@ -36,6 +39,8 @@ export interface GoalNode {
   archived?: boolean
   /** Directions only: 0 (cold, needs attention) to 10 (very warm), how alive the direction is. */
   warmth?: number
+  /** Goals only: a colour tag chosen from GOAL_COLORS. */
+  color?: GoalColor
 }
 
 export interface FrontierEntry {

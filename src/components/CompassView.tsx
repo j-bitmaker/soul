@@ -5,6 +5,8 @@ import { CLUSTER_IDS, MAX_ACTIVE, ROOT_ID } from '../domain/types'
 import { canShiftGoal, type NodeDetails } from '../domain/map'
 import { LabelPills, laneOf, nearestCluster, pathTo, toneById } from './goalView'
 import { EditableLabels, InlineAdd, InlineText } from './InlineEdit'
+import { GoalColorMenu } from './GoalColorMenu'
+import { GOAL_SWATCHES, goalColorVars } from './goalColors'
 import { PriorityMenu, type PriorityChoice } from './PriorityMenu'
 import { warmthVars } from './warmth'
 import { WarmthMeter } from './WarmthMeter'
@@ -118,9 +120,14 @@ function ClusterCard({ node, props }: { node: GoalNode; props: CompassViewProps 
     {node.description && <p className="cluster-description">{node.description}</p>}
     <WarmthMeter title={node.title} value={node.warmth} editable={owner} disabled={props.busy}
       onChange={(warmth) => props.onEditNode(node.id, { warmth })} />
-    {goals.length ? <ul className={`cluster-goals${owner ? ' owner' : ''}`} aria-label={`Goals in ${node.title}`}>{goals.map((goal) =>
-      <li key={goal.id}><button className="cluster-goal" onClick={() => props.onSelect(goal.id)}>
-        <span>{goal.title}</span>{!owner && laneOf(map, goal.id) === 'active' && <span className="lane-mark" data-lane="active"><span className="visually-hidden">In focus</span></span>}
+    {goals.length ? <ul className={`cluster-goals${owner ? ' owner' : ''}${goals.some((goal) => goal.color) ? ' has-colors' : ''}`} aria-label={`Goals in ${node.title}`}>{goals.map((goal) =>
+      <li key={goal.id}>
+        {owner
+          ? <GoalColorMenu className="row-color" title={goal.title} value={goal.color} disabled={props.busy}
+            onChange={(color) => props.onEditNode(goal.id, { color })} />
+          : goal.color && <span className="goal-dot row-color" style={goalColorVars(goal.color)} aria-hidden="true" />}
+        <button className="cluster-goal" onClick={() => props.onSelect(goal.id)}>
+        <span>{goal.title}</span>{!owner && goal.color && <span className="visually-hidden">Color: {GOAL_SWATCHES[goal.color].name}</span>}{!owner && laneOf(map, goal.id) === 'active' && <span className="lane-mark" data-lane="active"><span className="visually-hidden">In focus</span></span>}
       </button>
       {owner && <PriorityMenu title={goal.title} lane={laneOf(map, goal.id)} limit={MAX_ACTIVE} disabled={props.busy}
         canUp={canShiftGoal(map, goal.id, -1)} canDown={canShiftGoal(map, goal.id, 1)}
@@ -188,8 +195,8 @@ function Breadcrumb({ map, node, onSelect }: { map: GoalMap; node: GoalNode; onS
 function GoalRow({ props, child }: { props: CompassViewProps; child: GoalNode }) {
   const lane = laneOf(props.map, child.id)
   return <div className="frontier-row">
-    <button className="goal-row" onClick={() => props.onSelect(child.id)}>
-      <span className="goal-row-main"><span className="goal-row-title">{child.title}</span>{(child.description || child.current) && <span className="goal-row-detail">{child.description || child.current}</span>}<LabelPills labels={child.labels} /></span>
+    <button className="goal-row" data-color={child.color} style={goalColorVars(child.color)} onClick={() => props.onSelect(child.id)}>
+      <span className="goal-row-main"><span className="goal-row-title">{child.title}</span>{child.color && <span className="visually-hidden"> Color: {GOAL_SWATCHES[child.color].name}</span>}{(child.description || child.current) && <span className="goal-row-detail">{child.description || child.current}</span>}<LabelPills labels={child.labels} /></span>
       {lane === 'active' && <span className="lane-mark" data-lane="active"><span className="visually-hidden">In focus</span></span>}
       <ArrowRight aria-hidden="true" />
     </button>
@@ -277,7 +284,12 @@ function Focus({ props, node }: { props: CompassViewProps; node: GoalNode }) {
   return <main className="page" id="main-content" style={warmthVars(cluster?.warmth)}>
     <Breadcrumb map={props.map} node={node} onSelect={props.onSelect} />
     <div className="focus-header">
-      <div className="focus-kicker" data-tone={toneOf(cluster) ?? (cluster ? undefined : toneById.understand)}><span className="alive-dot" /><span className="eyebrow">{isProtected ? 'Direction' : 'Goal in focus'}</span></div>
+      <div className="focus-kicker" data-tone={toneOf(cluster) ?? (cluster ? undefined : toneById.understand)}>
+        <span className="alive-dot" /><span className="eyebrow">{isProtected ? 'Direction' : 'Goal in focus'}</span>
+        {ownGoal
+          ? <GoalColorMenu className="kicker-color" title={node.title} value={node.color} disabled={props.busy} onChange={(color) => props.onEditNode(node.id, { color })} />
+          : node.color && <><span className="goal-dot" style={goalColorVars(node.color)} aria-hidden="true" /><span className="visually-hidden">Color: {GOAL_SWATCHES[node.color].name}</span></>}
+      </div>
       <h1 className="detail-title">{ownGoal
         ? <InlineText editable required label="name" placeholder="Name" value={node.title} onSave={(title) => props.onEditNode(node.id, { title })} />
         : node.title}</h1>

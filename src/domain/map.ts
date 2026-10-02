@@ -1,5 +1,5 @@
 import { activeIds, normalizeFrontier, placeEntry, queuedIds, type WhenFull } from './frontier'
-import { CLUSTER_IDS, ROOT_ID, WARMTH_MAX, type FrontierLane, type GoalMap, type GoalNode, type Label, type Milestone } from './types'
+import { CLUSTER_IDS, GOAL_COLORS, ROOT_ID, WARMTH_MAX, type FrontierLane, type GoalColor, type GoalMap, type GoalNode, type Label, type Milestone } from './types'
 
 function requireNode(map: GoalMap, id: string): GoalNode {
   const node = map.nodes[id]
@@ -118,6 +118,8 @@ export interface NodeDetails {
   reminders?: string[]
   /** Directions only: 0 to 10, or null to clear it. */
   warmth?: number | null
+  /** Goals only: one of GOAL_COLORS, or null to clear it. */
+  color?: GoalColor | null
 }
 
 function unique<T>(items: readonly T[], key: (item: T) => string): T[] {
@@ -156,6 +158,12 @@ export function setNodeDetails(map: GoalMap, id: string, details: NodeDetails): 
     if (details.warmth === null) delete next.warmth
     else if (Number.isInteger(details.warmth) && details.warmth >= 0 && details.warmth <= WARMTH_MAX) next.warmth = details.warmth
     else throw new Error(`Warmth is a whole number from 0 to ${WARMTH_MAX}`)
+  }
+  if (details.color !== undefined) {
+    if (CLUSTER_IDS.includes(id as typeof CLUSTER_IDS[number])) throw new Error('Only goals have a color')
+    if (details.color === null) delete next.color
+    else if ((GOAL_COLORS as readonly string[]).includes(details.color)) next.color = details.color
+    else throw new Error(`Unknown color: ${String(details.color)}`)
   }
   const before = { description, current, target, note }
   for (const field of TEXT_FIELDS) {
@@ -335,6 +343,8 @@ function mergedTarget(source: GoalNode, target: GoalNode): GoalNode {
     milestones, labels: labels.length ? labels : undefined,
     reminders: [...new Set([...(target.reminders ?? []), ...(source.reminders ?? [])])],
     note: mergedNote(source, target),
+    // the merged goal keeps its own colour, or takes the other goal's when it has none
+    ...((target.color ?? source.color) ? { color: target.color ?? source.color } : {}),
   }
 }
 
