@@ -62,10 +62,11 @@ test('uses modern type and gives each direction room at narrow widths', async ({
   await page.setViewportSize({ width: 320, height: 700 })
   expect(await page.getByText('In focus now').count()).toBe(0)
   await expect(page.getByRole('heading', { name: /Active Frontier|Queue/ })).toHaveCount(0)
-  await expect(page.locator('.cluster-card').first().locator('.cluster-labels')).toContainText('Read Bible · Daily')
+  const understand = page.locator('.cluster-card[data-tone="expression"]')
+  await expect(understand.locator('.cluster-labels')).toContainText('Read Bible · Daily')
   // goals that wait in the Queue are not on the overview; active ones are
-  await expect(page.locator('.cluster-card').first()).not.toContainText('Theology / Scripture')
-  await expect(page.locator('.cluster-card').first().locator('.cluster-goal', { hasText: 'Launch Blog' })).toBeVisible()
+  await expect(understand).not.toContainText('Theology / Scripture')
+  await expect(understand.locator('.cluster-goal', { hasText: 'Launch Blog' })).toBeVisible()
   expect(await page.locator('.frontier-status').count()).toBe(0)
 })
 
@@ -517,11 +518,11 @@ test('sets the warmth with the keyboard too, and clears it by tapping the chosen
   await expect(card.locator('.warmth-value')).toHaveText('Not set')
 })
 
-test('keeps the directions in the same order at every width, whatever their warmth', async ({ page }) => {
+test('keeps the cards in the same order at every width, Self-Mastery first and Understand & Express last, whatever their warmth', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1000 })
   await page.goto('/')
   const order = () => page.locator('.cluster-open').allInnerTexts()
-  const original = ['Understand & Express', 'Practical Agency', 'Self-Mastery']
+  const original = ['Self-Mastery', 'Practical Agency', 'Understand & Express'] // the first and third cards have traded places
   await page.locator('.cluster-card[data-tone="expression"]').getByRole('radio', { name: '9, Very Warm' }).click()
   await page.locator('.cluster-card[data-tone="freedom"]').getByRole('radio', { name: '1, Cold' }).click()
   await page.locator('.cluster-card[data-tone="mastery"]').getByRole('radio', { name: '5, Alive' }).click()
@@ -540,6 +541,10 @@ test('keeps the directions in the same order at every width, whatever their warm
   expect(await order()).toEqual(original)
   await page.reload()
   expect(await order()).toEqual(original)
+
+  // only the cards were swapped: the Orbit keeps its ring, so its loop still runs Understand, Create, Self-Mastery
+  await page.getByRole('button', { name: 'Orbit' }).click()
+  expect(await page.locator('.orbit-node > span:first-child').allInnerTexts()).toEqual(['Understand & Express', 'Practical Agency', 'Self-Mastery'])
 })
 
 test('shows the warmth in the Orbit too, and lets the owner set it under the diagram', async ({ page }) => {
@@ -629,7 +634,7 @@ test('tags a goal with a colour right on the overview in two taps, and shows it 
   expect(await dotColour(page, 'Launch Blog')).toEqual({ colour: TEAL, empty: false })
 
   // the direction's list marks it with a band, and the goal's own page with its dot
-  await page.locator('.cluster-open').first().click()
+  await page.locator('.cluster-card[data-tone="expression"] .cluster-open').click()
   await expect(page.getByRole('heading', { name: 'Understand & Express', level: 1 })).toBeVisible()
   expect(await page.locator('.goal-row', { hasText: 'Launch Blog' }).evaluate((row) => getComputedStyle(row).borderLeftColor)).toBe(TEAL)
   await page.getByRole('button', { name: /^Launch Blog/ }).click()
