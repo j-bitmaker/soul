@@ -238,7 +238,7 @@ describe('CompassView', () => {
     expect(screen.getAllByRole('group', { name: /Warmth of/ })).toHaveLength(3)
   })
 
-  it('keeps the directions in the same order at every width, whatever their warmth', () => {
+  it('keeps the cards in the same order at every width, whatever their warmth: Self-Mastery first, Understand & Express last', () => {
     const map = structuredClone(createSeedMap())
     map.nodes.understand.warmth = 9
     map.nodes.create.warmth = 1
@@ -247,10 +247,26 @@ describe('CompassView', () => {
     for (const narrow of [true, false]) {
       vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: narrow, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
       const rendered = render(<CompassView {...props(map)} />)
-      expect(titles()).toEqual(['Understand & Express', 'Practical Agency', 'Self-Mastery'])
+      expect(titles()).toEqual(['Self-Mastery', 'Practical Agency', 'Understand & Express'])
       rendered.unmount()
     }
     vi.unstubAllGlobals()
+  })
+
+  it('swaps only the cards: each direction keeps its colour, and the orbit keeps its ring and its loop', () => {
+    window.localStorage.clear()
+    const view = props()
+    const rendered = render(<CompassView {...view} />)
+    expect([...document.querySelectorAll('.cluster-card')].map((card) => card.getAttribute('data-tone'))).toEqual(['mastery', 'freedom', 'expression'])
+    fireEvent.click(document.querySelector('.cluster-card[data-tone="mastery"] .cluster-open') as HTMLElement)
+    expect(view.onSelect).toHaveBeenLastCalledWith('mastery')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Orbit' }))
+    const nodes = [...document.querySelectorAll('.orbit-node')].map((node) => node.textContent)
+    expect(nodes).toEqual(['Understand & Express', 'Practical Agency', 'Self-Mastery'])
+    expect(screen.getByText(/Each direction leads to the next: Understand, Create, Self-Mastery/)).toBeInTheDocument()
+    rendered.unmount()
+    window.localStorage.clear()
   })
 
   it('carries a direction\'s palette onto its page and its goals\' pages, and puts the meter on the direction page', () => {

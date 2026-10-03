@@ -154,11 +154,17 @@ function CompassMark() {
   </svg>
 }
 
+/**
+ * The order of the direction cards: Self-Mastery, Practical Agency, Understand & Express. It is only how the cards are
+ * laid out; the directions' own order (`CLUSTER_IDS`, Soul's children, the Orbit's ring and loop) is not touched.
+ */
+const CARD_ORDER: readonly (typeof CLUSTER_IDS)[number][] = ['mastery', 'create', 'understand']
+
 function Overview({ props }: { props: CompassViewProps }) {
   const soul = props.map.nodes[ROOT_ID]
   const [view, setView] = useState<DirectionsView>(readDirectionsView)
-  // The directions keep their places at every width.
-  const directions = CLUSTER_IDS.map((id) => props.map.nodes[id]).filter((node): node is GoalNode => Boolean(node))
+  // The cards keep this order at every width, whatever the warmth.
+  const directions = CARD_ORDER.map((id) => props.map.nodes[id]).filter((node): node is GoalNode => Boolean(node))
   function changeView(next: DirectionsView): void {
     setView(next)
     writeDirectionsView(next)

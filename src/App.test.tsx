@@ -441,7 +441,7 @@ describe('Soul compass', () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Soul' })
     const titles = () => [...document.querySelectorAll('.cluster-open')].map((button) => button.textContent)
-    const original = ['Understand & Express', 'Practical Agency', 'Self-Mastery']
+    const original = ['Self-Mastery', 'Practical Agency', 'Understand & Express']
     expect(titles()).toEqual(original)
     fireEvent.click(within(document.querySelector('.cluster-card[data-tone="expression"]') as HTMLElement).getByRole('radio', { name: '10, Very Warm' }))
     await waitFor(() => expect(mocks.saveMap).toHaveBeenCalledTimes(1))
