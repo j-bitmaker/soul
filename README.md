@@ -21,6 +21,8 @@ Without Firebase settings, the app runs as a clearly labeled local preview. Prev
 
 The entire map, including notes, is publicly readable. Keep private thoughts elsewhere.
 
+If the page says "Offline copy" and editing stays paused even though you are signed in (the menu then offers "Sign out"), the browser cannot reach Firestore. A browser extension that rewrites requests or CORS headers is a common cause (DevTools shows `Access-Control-Allow-Origin ... must not be the wildcard '*'` for `firestore.googleapis.com`). Open the site in a private window, or turn the extension off for it.
+
 ## GitHub Pages
 
 Create a public `soul` repository, push this project to `main`, and set Pages **Build and deployment** to **GitHub Actions**. Configure the five `VITE_FIREBASE_*` Actions secrets before pushing. The workflow checks lint, types, tests, and build before publishing. Its build refuses missing Firebase settings.

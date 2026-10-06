@@ -16,6 +16,8 @@ export interface CompassViewProps {
   map: GoalMap
   selectedId: string | null
   canEdit: boolean
+  /** The owner is signed in, even if editing is paused (an offline copy). Defaults to `canEdit`. */
+  signedIn?: boolean
   authEnabled?: boolean
   busy?: boolean
   onSelect: (id: string | null) => void
@@ -59,6 +61,7 @@ function priorityChildren(map: GoalMap, id: string): GoalNode[] {
 function Header(props: CompassViewProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const importRef = useRef<HTMLInputElement>(null)
+  const signedIn = props.signedIn ?? props.canEdit
   useEffect(() => {
     if (!menuOpen) return
     function onKeyDown(event: KeyboardEvent) { if (event.key === 'Escape') setMenuOpen(false) }
@@ -76,9 +79,9 @@ function Header(props: CompassViewProps) {
       {menuOpen && <div className="utility-menu">
         <button onClick={() => { props.onExport(); setMenuOpen(false) }}><Download size={14} aria-hidden="true" /> Export JSON</button>
         {props.canEdit && <button onClick={() => importRef.current?.click()}><Upload size={14} aria-hidden="true" /> Import JSON</button>}
-        {props.authEnabled !== false && <button onClick={() => { if (props.canEdit) props.onSignOut(); else props.onSignIn(); setMenuOpen(false) }}>
-          {props.canEdit ? <LogOut size={14} aria-hidden="true" /> : <LogIn size={14} aria-hidden="true" />}
-          {props.canEdit ? 'Sign out' : 'Owner sign in'}
+        {props.authEnabled !== false && <button onClick={() => { if (signedIn) props.onSignOut(); else props.onSignIn(); setMenuOpen(false) }}>
+          {signedIn ? <LogOut size={14} aria-hidden="true" /> : <LogIn size={14} aria-hidden="true" />}
+          {signedIn ? 'Sign out' : 'Owner sign in'}
         </button>}
       </div>}
       <input ref={importRef} hidden type="file" accept="application/json,.json" aria-label="Import map JSON" onChange={(event) => {

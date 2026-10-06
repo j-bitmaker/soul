@@ -704,6 +704,17 @@ describe('CompassView', () => {
     expect(view.onSignIn).toHaveBeenCalledOnce()
   })
 
+  it('keeps "Sign out" for a signed-in owner whose editing is paused, and never offers sign in to someone signed in', () => {
+    const view = { ...props(), canEdit: false, signedIn: true }
+    render(<CompassView {...view} />)
+    fireEvent.click(screen.getByRole('button', { name: 'More options' }))
+    expect(screen.queryByRole('button', { name: 'Owner sign in' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Import JSON' })).not.toBeInTheDocument() // editing is still paused
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    expect(view.onSignOut).toHaveBeenCalledOnce()
+    expect(view.onSignIn).not.toHaveBeenCalled()
+  })
+
   it('does not offer owner authentication in local preview mode', () => {
     render(<CompassView {...props()} authEnabled={false} />)
     fireEvent.click(screen.getByRole('button', { name: 'More options' }))

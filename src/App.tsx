@@ -7,6 +7,7 @@ import { MergeDialog } from './components/MergeDialog'
 import {
   firebaseConfigured, isOwner, saveMap, signInOwner, signOutOwner, subscribeToMap, subscribeToOwner,
 } from './data/firebase'
+import { signInMessage } from './data/signInMessage'
 import { addGoal, archiveGoal, deleteGoal, mergeGoals, moveGoal, placeInFrontier, restoreGoal, shiftGoal,
   setNodeDetails, setSecondaryLinks, subtreeIds } from './domain/map'
 import { createSeedMap } from './domain/seed'
@@ -99,7 +100,8 @@ export default function App() {
   const [loginOpen, setLoginOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const canEdit = !firebaseConfigured || (isOwner(owner) && !fromCache)
+  const signedIn = firebaseConfigured && isOwner(owner)
+  const canEdit = !firebaseConfigured || (signedIn && !fromCache)
   const dialogOpen = loginOpen || (canEdit && (editorId !== undefined || mergeId !== null || deleteId !== null))
 
   function select(id: string | null, mode: NavigationMode = 'push'): void {
@@ -193,7 +195,7 @@ export default function App() {
       setLoginOpen(false)
       setError('')
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Sign in failed.')
+      setError(signInMessage(cause))
     } finally {
       setBusy(false)
     }
@@ -212,9 +214,9 @@ export default function App() {
 
   return <>
     {!firebaseConfigured && <p className="state-banner">Local preview · Changes stay in this browser until Firebase is configured.</p>}
-    {fromCache && <p className="state-banner">Offline copy · Editing is paused until the latest map is available.</p>}
+    {fromCache && <p className="state-banner">Offline copy · {signedIn ? 'You are signed in; editing' : 'Editing'} is paused until the latest map is available.</p>}
     {error && !dialogOpen && <div className="state-banner error-banner" role="alert">{error} <button onClick={() => window.location.reload()}>Reload map</button></div>}
-    <CompassView map={map} selectedId={selectedId} canEdit={canEdit} authEnabled={firebaseConfigured} busy={busy}
+    <CompassView map={map} selectedId={selectedId} canEdit={canEdit} signedIn={signedIn} authEnabled={firebaseConfigured} busy={busy}
       onSelect={(id) => select(id)}
       onOpenEditor={openEditor}
       onEditNode={(id, details) => persist((current) => setNodeDetails(current, id, details))}
