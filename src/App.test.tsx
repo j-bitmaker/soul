@@ -230,6 +230,40 @@ describe('Soul compass', () => {
     expect(screen.queryByRole('button', { name: 'Add label to Soul' })).not.toBeInTheDocument()
   })
 
+  it('tells a signed-in owner on an offline copy that they are signed in, and offers Sign out, not sign in', async () => {
+    mocks.cached = true
+    render(<App />)
+    expect(await screen.findByText(/Offline copy/)).toHaveTextContent('Offline copy · You are signed in; editing is paused until the latest map is available.')
+    fireEvent.click(screen.getByRole('button', { name: 'More options' }))
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Owner sign in' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('New goal in Practical Agency')).not.toBeInTheDocument()
+  })
+
+  it('keeps the old notice, and Owner sign in, for a visitor on an offline copy', async () => {
+    mocks.cached = true
+    mocks.owner = false
+    render(<App />)
+    expect(await screen.findByText(/Offline copy/)).toHaveTextContent('Offline copy · Editing is paused until the latest map is available.')
+    fireEvent.click(screen.getByRole('button', { name: 'More options' }))
+    expect(screen.getByRole('button', { name: 'Owner sign in' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument()
+  })
+
+  it('explains a blocked connection in the owner dialog instead of showing the Firebase code', async () => {
+    mocks.owner = false
+    mocks.signInOwner.mockRejectedValueOnce(Object.assign(new Error('Firebase: Error (auth/network-request-failed).'), { code: 'auth/network-request-failed' }))
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'More options' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Owner sign in' }))
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'owner@example.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    const dialog = screen.getByRole('dialog')
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Could not reach Firebase. A browser extension or a network filter may be blocking it; try a private window.')
+    expect(dialog).not.toHaveTextContent('auth/network-request-failed')
+  })
+
   it('shows a sign-in error inside the owner dialog', async () => {
     mocks.owner = false
     mocks.signInOwner.mockRejectedValueOnce(new Error('Wrong credentials'))
