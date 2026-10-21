@@ -34,10 +34,3 @@ This repository contains a single-user public Goal Map. Keep the product a calm 
 ## Definition of done
 
 Run test, coverage, lint, typecheck, build, and browser smoke checks. Review the code and security rules before committing. Verify the deployed GitHub Pages URL on desktop and mobile.
-
-## Remote workflow
-
-- The owner preauthorizes ordinary pushes to this repository, including its existing CI and GitHub Pages workflow. No separate push approval is needed for Soul.
-- Deploy every change automatically, without asking, unless the owner says otherwise (for example "don't deploy" or "only on the branch"). Once the Definition of done checks pass, merge the change into `main` (for example through a pull request), watch the "Verify and deploy" workflow until it finishes, and report its result. If the workflow fails, find the cause and fix it, or say what is blocking. Deploying never requires a force push or a rewrite of `main`.
-- If the sandbox cannot reach the deployed site, say the live check was not done instead of reporting it as verified.
-- Force pushes and remote history rewrites still require explicit approval.
